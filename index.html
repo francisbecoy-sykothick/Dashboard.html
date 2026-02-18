@@ -1483,14 +1483,19 @@ const CopraApp = (function() {
 
 
     // ── PENDING APPROVALS ─────────────────────────────────────────────────────
-    async function openPendingApprovals() {
-        document.getElementById('pending-modal').classList.remove('hidden');
+    async function openPendingApprovals(background = false) {
+        const modal = document.getElementById('pending-modal');
         const list = document.getElementById('pending-list');
-        list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-spinner animate-spin mr-2"></i>Loading...</p>';
+
+        // Only show modal and "Loading..." text if this is a manual click (not background auto-run)
+        if (!background) {
+            modal.classList.remove('hidden');
+            list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-spinner animate-spin mr-2"></i>Loading...</p>';
+        }
 
         const conn = getConnection();
         if(!conn.scriptUrl || !conn.secretToken) {
-            list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">Configure connection in Settings first.</p>';
+            if (!background) list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">Configure connection in Settings first.</p>';
             return;
         }
 
@@ -1498,85 +1503,56 @@ const CopraApp = (function() {
             const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=getPending`;
             const res = await fetch(url);
             const rows = await res.json();
-            // Skip header row
+            // Filter for 'Pending' status
             const data = rows.slice(1).filter(r => String(r[5]).trim() === 'Pending');
 
-            if(!data.length) {
-                list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-check-circle text-emerald-500 mr-2"></i>No pending transactions.</p>';
-                document.getElementById('pending-badge').classList.add('hidden');
-                return;
-            }
-
-            // Update badge
+            // ALWAYS update the red badge count (Background & Foreground)
             const badge = document.getElementById('pending-badge');
-            badge.textContent = data.length;
-            badge.classList.remove('hidden');
-
-            list.innerHTML = '';
-            data.forEach(row => {
-                const [id, date, name, amount, submittedBy, status, submittedAt] = row;
-                const fmtAmt = '₱' + parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits:2});
-                const fmtDate = date ? new Date(date).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '-';
-                const fmtTime = submittedAt ? new Date(submittedAt).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
-                const card = document.createElement('div');
-                card.className = 'bg-slate-50 dark:bg-slate-700 rounded-xl p-4 flex items-center justify-between gap-4';
-                card.innerHTML = `
-                    <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="font-bold text-sm">${name}</span>
-                            <span class="text-[10px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-full font-bold uppercase">Pending</span>
-                        </div>
-                        <p class="text-xl font-black text-rose-500">${fmtAmt}</p>
-                        <p class="text-[10px] text-slate-400 mt-1">Submitted by <span class="font-bold">${submittedBy}</span> · ${fmtTime}</p>
-                    </div>
-                    <div class="flex gap-2 flex-shrink-0">
-                        <button onclick="app.approveTransaction('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
-                            <i class="ph ph-check"></i> Approve
-                        </button>
-                        <button onclick="app.rejectTransaction('${id}')" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
-                            <i class="ph ph-x"></i> Reject
-                        </button>
-                    </div>`;
-                list.appendChild(card);
-            });
-        } catch(e) {
-            list.innerHTML = `<p class="text-rose-400 text-sm text-center py-8">Failed to load pending transactions.</p>`;
-        }
-    }
-
-    async function approveTransaction(id) {
-        const conn = getConnection();
-        try {
-            await fetch(conn.scriptUrl, {
-                method: 'POST', mode: 'no-cors',
-                headers: {'Content-Type':'application/json'},
-                body: JSON.stringify({token: conn.secretToken, action: 'approvePending', id, user: state.currentUser})
-            });
-            addNotification('Transaction approved', 'success');
-            showToast('Transaction approved!', 'success');
-            openPendingApprovals();
-            // Refresh main data
-            setTimeout(() => { applyFilters(); }, 1000);
-        } catch(e) {
-            showToast('Failed to approve. Try again.', 'error');
-        }
-    }
-
-    async function rejectTransaction(id) {
-        showConfirm('Reject Transaction', 'Are you sure you want to reject this transaction?', async () => {
-            const conn = getConnection();
-            try {
-                await fetch(conn.scriptUrl, {
-                    method: 'POST', mode: 'no-cors',
-                    headers: {'Content-Type':'application/json'},
-                    body: JSON.stringify({token: conn.secretToken, action: 'rejectPending', id})
-                });
-                showToast('Transaction rejected.', 'info');
-                openPendingApprovals();
-            } catch(e) {
-                showToast('Failed to reject. Try again.', 'error');
+            if (data.length > 0) {
+                badge.textContent = data.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
             }
-        });
+
+            // Update the list UI only if the modal is currently visible
+            if (!modal.classList.contains('hidden')) {
+                if(!data.length) {
+                    list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-check-circle text-emerald-500 mr-2"></i>No pending transactions.</p>';
+                    return;
+                }
+
+                list.innerHTML = '';
+                data.forEach(row => {
+                    const [id, date, name, amount, submittedBy, status, submittedAt] = row;
+                    const fmtAmt = '₱' + parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits:2});
+                    const fmtTime = submittedAt ? new Date(submittedAt).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+                    
+                    const card = document.createElement('div');
+                    card.className = 'bg-slate-50 dark:bg-slate-700 rounded-xl p-4 flex items-center justify-between gap-4 fade-in';
+                    card.innerHTML = `
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="font-bold text-sm">${name}</span>
+                                <span class="text-[10px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-full font-bold uppercase">Pending</span>
+                            </div>
+                            <p class="text-xl font-black text-rose-500">${fmtAmt}</p>
+                            <p class="text-[10px] text-slate-400 mt-1">Submitted by <span class="font-bold">${submittedBy}</span> · ${fmtTime}</p>
+                        </div>
+                        <div class="flex gap-2 flex-shrink-0">
+                            <button onclick="app.approveTransaction('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+                                <i class="ph ph-check"></i> Approve
+                            </button>
+                            <button onclick="app.rejectTransaction('${id}')" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+                                <i class="ph ph-x"></i> Reject
+                            </button>
+                        </div>`;
+                    list.appendChild(card);
+                });
+            }
+        } catch(e) {
+            if (!background) list.innerHTML = `<p class="text-rose-400 text-sm text-center py-8">Failed to load pending transactions.</p>`;
+        }
     }
 
 
