@@ -806,6 +806,8 @@ const CopraApp = (function() {
         applyFilters();
         setupCharacterCounters();
         showLoginIfNeeded();
+
+        setInterval(() => fetchSheetData(), 5 * 60 * 1000); // Auto-sync every 5 mins
     }
 
     function loadFromStorage() {
