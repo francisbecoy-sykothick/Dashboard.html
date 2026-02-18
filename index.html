@@ -807,7 +807,8 @@ const CopraApp = (function() {
         setupCharacterCounters();
         showLoginIfNeeded();
 
-        setInterval(() => fetchSheetData(), 5 * 60 * 1000); // Auto-sync every 5 mins
+        // ADD THIS: Auto-check Pending every 2 minutes (120,000 ms)
+        setInterval(() => openPendingApprovals(true), 2 * 60 * 1000);
     }
 
     function loadFromStorage() {
