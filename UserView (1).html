@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copra Trade - User View</title>
+    <meta name="theme-color" content="#f59e0b">
+    <link rel="manifest" href="userview-manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="User View">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{slate:{850:'#1e293b'}}}}}</script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        #app-container{font-family:'Inter',sans-serif;}
+        .scroller{-webkit-overflow-scrolling:touch;}
+        .scroller::-webkit-scrollbar{height:4px;width:4px;}
+        .scroller::-webkit-scrollbar-track{background:transparent;}
+        .scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+        .dark .scroller::-webkit-scrollbar-thumb{background:#475569;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .animate-spin{animation:spin 1s linear infinite;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+        .fade-in{animation:fadeIn 0.25s ease-out;}
+        @keyframes slideDown{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+        .slide-down{animation:slideDown 0.2s ease-out;}
+        #login-overlay{display:flex!important;}
+        #setup-overlay{display:flex!important;}
+        #login-overlay.hidden{display:none!important;}
+        #setup-overlay.hidden{display:none!important;}
+    </style>
+</head>
+<body class="bg-transparent p-0 m-0">
+
+<!-- Setup Overlay (first-time connection config) -->
+<div id="setup-overlay" class="hidden" style="position:fixed;inset:0;background:#0f172a;z-index:99998;display:flex;align-items:center;justify-content:center;">
+    <div class="w-full max-w-sm px-6">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <i class="ph ph-nut text-3xl text-slate-900"></i>
+            </div>
+            <h2 class="text-white text-2xl font-bold">COPRA TRADE</h2>
+            <p class="text-slate-400 text-sm mt-1">One-time setup required</p>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Apps Script URL</label>
+                <input type="text" id="setup-script-url" autocomplete="off" placeholder="https://script.google.com/macros/s/..."
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Secret Token</label>
+                <input type="password" id="setup-token" autocomplete="off" placeholder="Enter secret token"
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500">
+            </div>
+            <p id="setup-error" class="text-rose-400 text-xs text-center h-4"></p>
+            <button onclick="app.saveSetup()"
+                class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                <i class="ph ph-check"></i> Save & Continue
+            </button>
+        </div>
+        <p class="text-center text-slate-600 text-xs mt-6">Ask your admin for the Apps Script URL and token</p>
+    </div>
+</div>
+
+<!-- Login Overlay -->
+<div id="login-overlay" class="hidden" style="position:fixed;inset:0;background:#0f172a;z-index:99999;display:flex;align-items:center;justify-content:center;">
+    <div class="w-full max-w-sm px-6">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <i class="ph ph-nut text-3xl text-slate-900"></i>
+            </div>
+            <h2 class="text-white text-2xl font-bold">COPRA TRADE</h2>
+            <p class="text-slate-400 text-sm mt-1">User View — Sign in to continue</p>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Username</label>
+                <input type="text" id="login-username" autocomplete="off" placeholder="Enter username"
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Password</label>
+                <input type="password" id="login-password" autocomplete="off" placeholder="Enter password"
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500"
+                    onkeydown="if(event.key==='Enter')app.submitLogin()">
+            </div>
+            <p id="login-error" class="text-rose-400 text-xs text-center h-4"></p>
+            <button onclick="app.submitLogin()" id="login-btn"
+                class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                <i class="ph ph-sign-in"></i> Sign In
+            </button>
+        </div>
+        <p class="text-center text-slate-600 text-xs mt-6">Credentials verified against your Google Sheet</p>
+    </div>
+</div>
+
+<div id="app-container" class="w-full min-h-[90vh] flex flex-col bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800">
+
+    <!-- Header -->
+    <header class="bg-slate-900 text-white px-5 py-4 flex items-center justify-between rounded-t-xl flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center">
+                <i class="ph ph-nut text-slate-900 text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold leading-none">COPRA TRADE</h1>
+                <p class="text-[10px] text-slate-400 mt-0.5">User View</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="user-badge" class="text-xs text-slate-400 hidden"><i class="ph ph-user mr-1"></i><span id="username-display"></span></span>
+            <button onclick="app.toggleDarkMode()" class="p-2 rounded-lg text-slate-400 hover:bg-slate-800">
+                <i id="dark-icon" class="ph ph-moon text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4 md:p-6 scroller space-y-6">
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-2 gap-3">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                <p class="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1 mb-1">
+                    <i class="ph ph-clock-countdown text-orange-500"></i> Pending
+                </p>
+                <p class="text-2xl font-black text-orange-500" id="pending-count">0</p>
+            </div>
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                <p class="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1 mb-1">
+                    <i class="ph ph-check-circle text-emerald-500"></i> Approved
+                </p>
+                <p class="text-2xl font-black text-emerald-500" id="approved-count">0</p>
+            </div>
+        </div>
+
+        <!-- Monthly Summary (from main sheet) -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                    <i class="ph ph-calendar text-amber-500"></i> This Month's Summary
+                </h3>
+                <button onclick="app.loadData()" class="text-xs text-slate-400 hover:text-amber-500 flex items-center gap-1">
+                    <i class="ph ph-arrows-clockwise" id="refresh-icon"></i> Refresh
+                </button>
+            </div>
+            <div class="grid grid-cols-3 gap-3" id="monthly-summary">
+                <div class="text-center p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold">Released</p>
+                    <p class="text-sm font-black text-rose-500" id="month-released">₱0.00</p>
+                </div>
+                <div class="text-center p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold">Received</p>
+                    <p class="text-sm font-black text-emerald-500" id="month-received">₱0.00</p>
+                </div>
+                <div class="text-center p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold">Balance</p>
+                    <p class="text-sm font-black" id="month-net">₱0.00</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Submit Transaction Form -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-5">
+            <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4 flex items-center gap-2">
+                <i class="ph ph-plus-circle text-amber-500"></i> Submit a Release Request
+            </h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Your Name *</label>
+                    <input type="text" id="tx-name" placeholder="Enter your name" maxlength="100" autocomplete="off"
+                        class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount *</label>
+                    <div class="relative">
+                        <span class="absolute left-3 top-2 text-slate-400 text-sm">₱</span>
+                        <input type="number" id="tx-amount" step="0.01" min="0.01" placeholder="0.00"
+                            class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 border pl-7 pr-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
+                </div>
+                <div class="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-lg flex items-start gap-2">
+                    <i class="ph ph-info text-amber-500 mt-0.5"></i>
+                    <p class="text-xs text-amber-700 dark:text-amber-400">This will be sent for approval. The date will be automatically recorded as today. You'll see it as <span class="font-bold">Pending</span> until an admin approves it.</p>
+                </div>
+                <button onclick="app.submitTransaction()" id="submit-btn"
+                    class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg text-sm transition flex items-center justify-center gap-2">
+                    <i class="ph ph-paper-plane-tilt"></i> Submit for Approval
+                </button>
+            </div>
+        </div>
+
+        <!-- Transaction History -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                    <i class="ph ph-list-bullets text-amber-500"></i> My Transactions
+                </h3>
+                <div class="flex gap-2">
+                    <button onclick="app.setFilter('all')" id="filter-all" class="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 text-white">All</button>
+                    <button onclick="app.setFilter('Pending')" id="filter-pending" class="text-[10px] font-bold px-2 py-1 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Pending</button>
+                    <button onclick="app.setFilter('Approved')" id="filter-approved" class="text-[10px] font-bold px-2 py-1 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Approved</button>
+                    <button onclick="app.setFilter('Rejected')" id="filter-rejected" class="text-[10px] font-bold px-2 py-1 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">Rejected</button>
+                </div>
+            </div>
+            <div id="tx-list" class="divide-y divide-slate-100 dark:divide-slate-700 max-h-80 overflow-y-auto scroller">
+                <p class="text-slate-400 text-xs text-center py-10">Loading transactions...</p>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-4 left-1/2 -translate-x-1/2 transform translate-y-20 opacity-0 transition-all duration-300 z-[9999]">
+    <div class="bg-slate-800 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2">
+        <i class="ph ph-info text-amber-400" id="toast-icon"></i>
+        <span id="toast-message" class="text-xs font-bold">Done</span>
+    </div>
+</div>
+
+<script>
+const UserApp = (function() {
+    'use strict';
+
+    const CONN_KEY = 'copraConnection';
+    const THEME_KEY = 'copraTheme';
+
+    function getConnection() {
+        try { return JSON.parse(localStorage.getItem(CONN_KEY)) || {}; }
+        catch { return {}; }
+    }
+
+    let state = {
+        loggedIn: false,
+        username: '',
+        allTx: [],       // all pending rows for this user
+        mainTx: [],      // approved rows from main sheet
+        activeFilter: 'all'
+    };
+
+    // ── INIT ──────────────────────────────────────────────────────────────────
+    function init() {
+        applyTheme();
+        showLoginIfNeeded();
+    }
+
+    function showLoginIfNeeded() {
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) {
+            document.getElementById('setup-overlay').classList.remove('hidden');
+            return;
+        }
+        if(sessionStorage.getItem('copraUserLoggedIn') === '1') {
+            state.loggedIn = true;
+            state.username = sessionStorage.getItem('copraUsername') || '';
+            afterLogin();
+            return;
+        }
+        showLoginOverlay();
+    }
+
+    function saveSetup() {
+        const scriptUrl = document.getElementById('setup-script-url').value.trim();
+        const token = document.getElementById('setup-token').value.trim();
+        const errEl = document.getElementById('setup-error');
+
+        if(!scriptUrl || !scriptUrl.startsWith('https://script.google.com')) {
+            errEl.textContent = 'Please enter a valid Apps Script URL.';
+            return;
+        }
+        if(!token || token.length < 8) {
+            errEl.textContent = 'Token must be at least 8 characters.';
+            return;
+        }
+
+        localStorage.setItem('copraConnection', JSON.stringify({ scriptUrl, secretToken: token }));
+        document.getElementById('setup-overlay').classList.add('hidden');
+        showLoginOverlay();
+    }
+
+    function showLoginOverlay() {
+        document.getElementById('login-username').value = '';
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-error').textContent = '';
+        document.getElementById('login-overlay').classList.remove('hidden');
+        setTimeout(() => document.getElementById('login-username').focus(), 100);
+    }
+
+    async function submitLogin() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        const errEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+
+        if(!username || !password) { errEl.textContent = 'Please enter both fields.'; return; }
+
+        const conn = getConnection();
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Signing in...';
+        errEl.textContent = '';
+
+        try {
+            const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+            const res = await fetch(url);
+            const result = await res.json();
+            if(result.success) {
+                state.loggedIn = true;
+                state.username = username;
+                sessionStorage.setItem('copraUserLoggedIn', '1');
+                sessionStorage.setItem('copraUsername', username);
+                document.getElementById('login-overlay').classList.add('hidden');
+                afterLogin();
+            } else {
+                errEl.textContent = result.message || 'Incorrect username or password.';
+            }
+        } catch(e) {
+            errEl.textContent = 'Connection error. Check your Apps Script URL.';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
+        }
+    }
+
+    function afterLogin() {
+        const el = document.getElementById('username-display');
+        if(el) el.textContent = state.username;
+        document.getElementById('user-badge').classList.remove('hidden');
+        loadData();
+    }
+
+    // ── DATA LOADING ──────────────────────────────────────────────────────────
+    async function loadData() {
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) return;
+
+        const icon = document.getElementById('refresh-icon');
+        icon.classList.add('animate-spin');
+
+        try {
+            // Load pending transactions for this user
+            const pendingUrl = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=getMyPending&username=${encodeURIComponent(state.username)}`;
+            const pendingRes = await fetch(pendingUrl);
+            const pendingRows = await pendingRes.json();
+            // Skip header row, map to objects
+            state.allTx = (pendingRows.slice(1) || []).map(r => ({
+                id: r[0], date: r[1], name: r[2], amount: parseFloat(r[3])||0,
+                submittedBy: r[4], status: r[5], submittedAt: r[6]
+            }));
+
+            // Load main sheet for monthly summary
+            const mainUrl = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=read`;
+            const mainRes = await fetch(mainUrl);
+            const mainRows = await mainRes.json();
+            const dataRows = mainRows.length > 0 && isNaN(mainRows[0][3]) ? mainRows.slice(1) : mainRows;
+            state.mainTx = dataRows.map(r => ({
+                date: (r[0]||'').toString().trim(),
+                name: (r[1]||'').toString().trim(),
+                type: /receive|credit/i.test(r[2]) ? 'credit' : 'debit',
+                amount: parseFloat((r[3]||'').toString().replace(/,/g,''))||0
+            })).filter(r => r.name && r.amount > 0);
+
+            updateSummary();
+            renderTxList();
+        } catch(e) {
+            showToast('Failed to load data.', 'error');
+        } finally {
+            icon.classList.remove('animate-spin');
+        }
+    }
+
+    function updateSummary() {
+        const now = new Date();
+        const thisMo = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+        let released = 0, received = 0;
+        state.mainTx.forEach(t => {
+            if(!t.date.startsWith(thisMo)) return;
+            if(t.type === 'debit') released += t.amount;
+            else received += t.amount;
+        });
+
+        const fmt = a => '₱' + a.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+        document.getElementById('month-released').textContent = fmt(released);
+        document.getElementById('month-received').textContent = fmt(received);
+        const net = received - released;
+        const netEl = document.getElementById('month-net');
+        netEl.textContent = fmt(net);
+        netEl.className = `text-sm font-black ${net >= 0 ? 'text-emerald-500' : 'text-rose-500'}`;
+
+        // Counts
+        const pending = state.allTx.filter(t => t.status === 'Pending').length;
+        const approved = state.allTx.filter(t => t.status === 'Approved').length;
+        document.getElementById('pending-count').textContent = pending;
+        document.getElementById('approved-count').textContent = approved;
+    }
+
+    function renderTxList() {
+        const list = document.getElementById('tx-list');
+        const fmt = a => '₱' + parseFloat(a).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+
+        let filtered = state.allTx;
+        if(state.activeFilter !== 'all') {
+            filtered = state.allTx.filter(t => t.status === state.activeFilter);
+        }
+
+        if(!filtered.length) {
+            list.innerHTML = `<p class="text-slate-400 text-xs text-center py-10">No ${state.activeFilter === 'all' ? '' : state.activeFilter.toLowerCase()} transactions yet.</p>`;
+            return;
+        }
+
+        list.innerHTML = '';
+        // Sort newest first
+        [...filtered].sort((a,b) => new Date(b.submittedAt) - new Date(a.submittedAt)).forEach(t => {
+            const statusColors = {
+                Pending: 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400',
+                Approved: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                Rejected: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+            };
+            const statusIcons = { Pending: 'ph-clock', Approved: 'ph-check-circle', Rejected: 'ph-x-circle' };
+            const fmtTime = t.submittedAt ? new Date(t.submittedAt).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+            const div = document.createElement('div');
+            div.className = 'px-4 py-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors fade-in';
+            div.innerHTML = `
+                <div class="flex-1 min-w-0">
+                    <p class="font-semibold text-sm truncate">${t.name}</p>
+                    <p class="text-[10px] text-slate-400 mt-0.5">${fmtTime}</p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                    <p class="font-black text-rose-500 text-sm">${fmt(t.amount)}</p>
+                    <span class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${statusColors[t.status]||''}">
+                        <i class="ph ${statusIcons[t.status]||'ph-info'}"></i>${t.status}
+                    </span>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    function setFilter(f) {
+        state.activeFilter = f;
+        ['all','Pending','Approved','Rejected'].forEach(name => {
+            const btn = document.getElementById(`filter-${name.toLowerCase()}`);
+            if(btn) btn.className = `text-[10px] font-bold px-2 py-1 rounded-lg ${f===name ? 'bg-slate-800 text-white dark:bg-amber-500' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`;
+        });
+        renderTxList();
+    }
+
+    // ── SUBMIT TRANSACTION ────────────────────────────────────────────────────
+    async function submitTransaction() {
+        const name = document.getElementById('tx-name').value.trim();
+        const amount = parseFloat(document.getElementById('tx-amount').value);
+
+        if(!name || name.length < 2) { showToast('Please enter your name (at least 2 characters).', 'error'); return; }
+        if(!amount || amount <= 0) { showToast('Please enter a valid amount.', 'error'); return; }
+
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) { showToast('Connection not configured.', 'error'); return; }
+
+        const btn = document.getElementById('submit-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Submitting...';
+
+        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+        try {
+            await fetch(conn.scriptUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    token: conn.secretToken,
+                    action: 'submitPending',
+                    date: today,
+                    name: name,
+                    amount: amount,
+                    submittedBy: state.username
+                })
+            });
+
+            // Optimistically add to local state as pending
+            state.allTx.unshift({
+                id: 'P' + Date.now(),
+                date: today,
+                name: name,
+                amount: amount,
+                submittedBy: state.username,
+                status: 'Pending',
+                submittedAt: new Date().toISOString()
+            });
+
+            document.getElementById('tx-name').value = '';
+            document.getElementById('tx-amount').value = '';
+            updateSummary();
+            setFilter('all');
+            showToast('Submitted! Waiting for approval.', 'success');
+
+            // Reload from server after short delay to get the real ID
+            setTimeout(() => loadData(), 2000);
+        } catch(e) {
+            showToast('Submission failed. Try again.', 'error');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-paper-plane-tilt"></i> Submit for Approval';
+        }
+    }
+
+    // ── THEME ─────────────────────────────────────────────────────────────────
+    function toggleDarkMode() {
+        const c = document.getElementById('app-container');
+        c.classList.toggle('dark');
+        const dark = c.classList.contains('dark');
+        localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
+        document.getElementById('dark-icon').className = dark ? 'ph ph-sun text-lg' : 'ph ph-moon text-lg';
+    }
+
+    function applyTheme() {
+        if(localStorage.getItem(THEME_KEY) === 'dark') {
+            document.getElementById('app-container').classList.add('dark');
+            document.getElementById('dark-icon').className = 'ph ph-sun text-lg';
+        }
+    }
+
+    // ── TOAST ─────────────────────────────────────────────────────────────────
+    function showToast(msg, type='info') {
+        const icons = {success:'ph-check-circle',error:'ph-x-circle',warning:'ph-warning',info:'ph-info'};
+        const colors = {success:'text-emerald-400',error:'text-rose-400',warning:'text-amber-400',info:'text-blue-400'};
+        document.getElementById('toast-icon').className = `ph ${icons[type]||icons.info} ${colors[type]||colors.info}`;
+        document.getElementById('toast-message').textContent = msg;
+        const t = document.getElementById('toast');
+        t.classList.remove('translate-y-20','opacity-0');
+        setTimeout(() => t.classList.add('translate-y-20','opacity-0'), 3500);
+    }
+
+    return { init, submitLogin, submitTransaction, loadData, setFilter, toggleDarkMode, saveSetup };
+})();
+
+window.app = UserApp;
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => UserApp.init());
+else UserApp.init();
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js')
+        .then(() => console.log('Service Worker registered'))
+        .catch(err => console.log('Service Worker registration failed:', err));
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "name": "Copra Trade Dashboard",
+  "short_name": "Dashboard",
+  "description": "Copra Trade Ledger Management Dashboard",
+  "start_url": "./Dashboard.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#f59e0b",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect fill='%23f59e0b' width='512' height='512' rx='100'/%3E%3Ctext x='256' y='380' font-size='300' text-anchor='middle' fill='%23000'%3E🥥%3C/text%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Add Transaction",
+      "short_name": "Add",
+      "url": "./Dashboard.html#add",
+      "icons": [{"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle fill='%2310b981' cx='50' cy='50' r='50'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle' fill='white'%3E+%3C/text%3E%3C/svg%3E", "sizes": "96x96"}]
+    },
+    {
+      "name": "Pending Approvals",
+      "short_name": "Pending",
+      "url": "./Dashboard.html#pending",
+      "icons": [{"src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle fill='%23f97316' cx='50' cy='50' r='50'/%3E%3Ctext x='50' y='70' font-size='60' text-anchor='middle' fill='white'%3E⏱%3C/text%3E%3C/svg%3E", "sizes": "96x96"}]
+    }
+  ]
+}

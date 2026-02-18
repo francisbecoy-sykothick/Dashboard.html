@@ -1,0 +1,1896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Copra Trade - Ledger</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{slate:{850:'#1e293b'}}}}}</script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        #app-container{font-family:'Inter',sans-serif;}
+        .scroller{-webkit-overflow-scrolling:touch;}
+        .scroller::-webkit-scrollbar{height:4px;width:4px;}
+        .scroller::-webkit-scrollbar-track{background:transparent;}
+        .scroller::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+        .dark .scroller::-webkit-scrollbar-thumb{background:#475569;}
+        .chart-container{position:relative;width:100%;height:250px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .animate-spin{animation:spin 1s linear infinite;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+        .fade-in{animation:fadeIn 0.25s ease-out;}
+        @keyframes slideDown{from{opacity:0;transform:translateY(-10px);}to{opacity:1;transform:translateY(0);}}
+        .slide-down{animation:slideDown 0.2s ease-out;}
+        /* Login overlay */
+        #login-overlay{display:flex!important;}
+        #login-overlay.hidden{display:none!important;}
+        /* Swipe row */
+        .swipe-row{position:relative;overflow:hidden;}
+        .swipe-delete-bg{position:absolute;right:0;top:0;bottom:0;background:#ef4444;display:flex;align-items:center;padding:0 16px;color:white;font-size:12px;font-weight:bold;gap:6px;opacity:0;transition:opacity 0.2s;}
+        /* Undo bar */
+        #undo-bar{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(60px);opacity:0;transition:all 0.3s;z-index:9990;}
+        #undo-bar.show{transform:translateX(-50%) translateY(0);opacity:1;}
+        /* Goal progress */
+        .goal-bar{height:6px;border-radius:3px;background:#e2e8f0;overflow:hidden;}
+        .goal-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#f59e0b,#10b981);transition:width 0.6s ease;}
+        /* Bulk select */
+        .row-checkbox{width:14px;height:14px;accent-color:#f59e0b;}
+        /* MoM comparison colors */
+        .mom-up{color:#10b981;}
+        .mom-down{color:#ef4444;}
+        .mom-flat{color:#94a3b8;}
+        /* Bottom nav mobile */
+        #mobile-nav{display:none;}
+        @media(max-width:767px){
+            #mobile-nav{display:flex;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;z-index:10000;padding:8px 0;pointer-events:auto;}
+            #app-container{max-height:calc(100vh - 64px);overflow:hidden;}
+            #app-container aside nav{display:none;}
+        }
+        /* Print */
+        @media print{
+            body *{visibility:hidden;}
+            #print-area, #print-area *{visibility:visible;}
+            #print-area{position:fixed;inset:0;background:white;padding:24px;}
+        }
+    </style>
+</head>
+<body class="bg-transparent p-0 m-0">
+
+<!-- Login Overlay -->
+<div id="login-overlay" class="hidden" style="position:fixed;inset:0;background:#0f172a;z-index:99999;display:flex;align-items:center;justify-content:center;">
+    <div class="w-full max-w-sm px-6">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <i class="ph ph-nut text-3xl text-slate-900"></i>
+            </div>
+            <h2 class="text-white text-2xl font-bold">COPRA TRADE</h2>
+            <p class="text-slate-400 text-sm mt-1">Sign in to continue</p>
+        </div>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Username</label>
+                <input type="text" id="login-username" autocomplete="off" placeholder="Enter username"
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Password</label>
+                <input type="password" id="login-password" autocomplete="off" placeholder="Enter password"
+                    class="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder-slate-500"
+                    onkeydown="if(event.key==='Enter')app.submitLogin()">
+            </div>
+            <p id="login-error" class="text-rose-400 text-xs text-center h-4"></p>
+            <button onclick="app.submitLogin()" id="login-btn"
+                class="w-full bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold py-3 rounded-xl text-sm transition flex items-center justify-center gap-2">
+                <i class="ph ph-sign-in"></i> Sign In
+            </button>
+        </div>
+        <p class="text-center text-slate-600 text-xs mt-6">Credentials verified against your Google Sheet</p>
+
+    </div>
+</div>
+
+<!-- Undo Bar -->
+<div id="undo-bar">
+    <div class="bg-slate-800 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-3 text-xs font-bold">
+        <i class="ph ph-arrow-counter-clockwise text-amber-400"></i>
+        <span>Transaction deleted</span>
+        <button onclick="app.undoDelete()" class="bg-amber-500 hover:bg-amber-400 text-slate-900 px-3 py-1 rounded-full font-bold transition">UNDO</button>
+    </div>
+</div>
+
+<!-- Print Area -->
+<div id="print-area" class="hidden"></div>
+
+<div id="app-container" class="group relative w-full min-h-[90vh] flex flex-col md:flex-row overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 transition-colors duration-300 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800">
+
+    <!-- Sidebar -->
+    <aside class="w-full md:w-64 bg-slate-900 dark:bg-slate-950 text-white flex-shrink-0 flex flex-col md:h-full md:overflow-y-auto max-h-fit md:max-h-full border-r border-slate-800 scroller">
+        <div class="p-4 md:p-6 border-b border-slate-700 flex items-center justify-between md:justify-start gap-3 sticky top-0 bg-slate-900 dark:bg-slate-950 z-20">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-amber-500 rounded-lg flex items-center justify-center text-slate-900 font-bold">
+                    <i class="ph ph-nut text-xl"></i>
+                </div>
+                <h1 class="text-lg font-bold tracking-wide">COPRA TRADE</h1>
+            </div>
+        </div>
+        <nav class="flex-row md:flex-col flex p-2 md:p-4 gap-2 overflow-x-auto md:overflow-y-auto scroller whitespace-nowrap md:whitespace-normal">
+            <button onclick="app.switchToDashboard()" id="nav-dashboard" class="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-amber-500 text-white font-medium transition-colors text-left shadow-lg shadow-amber-500/20">
+                <i class="ph ph-chart-line-up text-xl"></i><span class="text-sm md:text-base">Dashboard</span>
+            </button>
+            <button onclick="app.fetchSheetData()" id="sync-btn" class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-800 text-emerald-400 transition-colors text-left">
+                <i class="ph ph-cloud-arrow-down text-xl" id="sync-icon"></i><span class="text-sm md:text-base">Sync</span>
+            </button>
+            <button onclick="app.openMonthlyReport()" class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors text-left">
+                <i class="ph ph-files text-xl"></i><span class="text-sm md:text-base">Reports</span>
+            </button>
+            <button onclick="app.openPendingApprovals()" class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-orange-400 transition-colors text-left">
+                <i class="ph ph-clock-countdown text-xl"></i>
+                <span class="text-sm md:text-base">Pending</span>
+                <span id="pending-badge" class="hidden ml-auto bg-orange-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full"></span>
+            </button>
+            <button onclick="app.openActivityLog()" class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors text-left">
+                <i class="ph ph-list-dashes text-xl"></i>
+                <span class="text-sm md:text-base">Activity</span>
+            </button>
+            <button onclick="app.showSettings()" class="flex items-center gap-3 px-4 py-2.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-purple-400 transition-colors text-left">
+                <i class="ph ph-gear text-xl"></i><span class="text-sm md:text-base">Settings</span>
+            </button>
+            <button onclick="app.downloadBackup()" class="hidden md:flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-blue-400 transition-colors text-left">
+                <i class="ph ph-download-simple text-xl"></i>Backup
+            </button>
+        </nav>
+
+        <div class="hidden md:block p-4 border-t border-slate-800">
+            <div class="bg-slate-800 rounded-xl p-4">
+                <h3 class="text-xs font-bold text-slate-300 uppercase mb-3 flex items-center justify-between">
+                    <span>New Entry</span>
+                    <button onclick="app.resetForm()" class="text-slate-500 hover:text-amber-400"><i class="ph ph-arrows-counter-clockwise text-sm"></i></button>
+                </h3>
+                <form id="transaction-form" onsubmit="app.handleFormSubmit(event)" class="space-y-3">
+                    <input type="hidden" id="t-id">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Date *</label>
+                        <input type="date" id="t-date" required class="w-full rounded-lg border-slate-700 bg-slate-700 text-slate-200 border px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Name *</label>
+                        <input type="text" id="t-name" placeholder="Juan Dela Cruz" required maxlength="100" autocomplete="off" class="w-full rounded-lg border-slate-700 bg-slate-700 text-slate-200 border px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none placeholder-slate-500">
+                        <p class="text-[10px] text-slate-500 mt-0.5"><span id="name-counter">0</span>/100</p>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Type *</label>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <label class="cursor-pointer">
+                                <input type="radio" name="t-type" value="credit" class="peer sr-only">
+                                <div class="text-center py-1.5 border border-slate-600 rounded-lg peer-checked:bg-emerald-500 peer-checked:text-white peer-checked:border-emerald-500 text-[11px] font-bold transition-all text-slate-400 hover:border-emerald-400"><i class="ph ph-arrow-down"></i> Receive</div>
+                            </label>
+                            <label class="cursor-pointer">
+                                <input type="radio" name="t-type" value="debit" class="peer sr-only" checked>
+                                <div class="text-center py-1.5 border border-slate-600 rounded-lg peer-checked:bg-rose-500 peer-checked:text-white peer-checked:border-rose-500 text-[11px] font-bold transition-all text-slate-400 hover:border-rose-400"><i class="ph ph-arrow-up"></i> Release</div>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Amount *</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-2 text-slate-500 text-xs">₱</span>
+                            <input type="number" id="t-amount" step="0.01" min="0.01" placeholder="0.00" required class="w-full rounded-lg border-slate-700 bg-slate-700 text-slate-200 border pl-6 pr-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Notes</label>
+                        <textarea id="t-notes" placeholder="Optional..." maxlength="200" rows="2" class="w-full rounded-lg border-slate-700 bg-slate-700 text-slate-200 border px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none resize-none placeholder-slate-500"></textarea>
+                        <p class="text-[10px] text-slate-500 mt-0.5"><span id="notes-counter">0</span>/200</p>
+                    </div>
+                    <button type="submit" id="btn-submit" class="w-full bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold py-2.5 rounded-lg transition-all text-xs flex items-center justify-center gap-1.5">
+                        <i class="ph ph-plus-circle"></i><span id="btn-text">Add Record</span>
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="hidden md:block p-4 border-t border-slate-800 mt-auto">
+            <div class="bg-slate-800 rounded-lg p-4">
+                <p class="text-xs text-slate-400 mb-1">Current Capital</p>
+                <p class="text-xl font-bold text-white" id="sidebar-balance">₱0.00</p>
+                <div class="mt-2 pt-2 border-t border-slate-700">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">This Month</p>
+                    <p class="text-sm font-semibold" id="sidebar-monthly">₱0.00</p>
+                </div>
+                <!-- Goal progress -->
+                <div class="mt-3 pt-2 border-t border-slate-700" id="goal-sidebar" style="display:none">
+                    <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">Capital Goal</p>
+                    <div class="goal-bar mt-1"><div class="goal-fill" id="goal-fill" style="width:0%"></div></div>
+                    <p class="text-[10px] text-slate-400 mt-1" id="goal-pct">0%</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden relative">
+        <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+            <div class="flex items-center gap-2">
+                <h2 class="text-lg md:text-xl font-semibold text-slate-700 dark:text-slate-200 truncate" id="header-title">Daily Ledger</h2>
+                <span id="history-badge" class="hidden px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-bold uppercase">Archived</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <!-- Bulk delete button (shown when rows selected) -->
+                <button id="bulk-delete-btn" onclick="app.bulkDelete()" class="hidden p-2 md:px-3 md:py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-sm font-medium">
+                    <i class="ph ph-trash md:mr-1"></i><span class="hidden md:inline" id="bulk-count">Delete 0</span>
+                </button>
+                <button onclick="app.toggleNotifications()" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 relative" title="Notifications">
+                    <i class="ph ph-bell text-xl"></i>
+                    <span id="notif-badge" class="hidden absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">0</span>
+                </button>
+                <button onclick="app.toggleDarkMode()" class="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700">
+                    <i id="dark-icon" class="ph ph-moon text-xl"></i>
+                </button>
+                <button onclick="app.exportToCSV()" class="p-2 md:px-3 md:py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 text-slate-700 dark:text-slate-200">
+                    <i class="ph ph-download-simple md:mr-1"></i><span class="hidden md:inline">Export</span>
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 scroller bg-slate-50 dark:bg-slate-900 pb-24 md:pb-6">
+
+            <!-- Alert banners -->
+            <div id="alert-banner" class="hidden mb-4 p-3 rounded-xl border flex items-center gap-2 text-sm font-medium slide-down"></div>
+
+            <!-- Search & Filter -->
+            <div class="mb-4 flex flex-wrap gap-2 items-end">
+                <div class="flex-1 min-w-[180px] relative">
+                    <i class="ph ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="search-input" placeholder="Search by name..." autocomplete="off" class="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-amber-500 outline-none" oninput="app.applyFilters()">
+                </div>
+                <select id="filter-type" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-amber-500 outline-none" onchange="app.applyFilters()">
+                    <option value="all">All Types</option>
+                    <option value="credit">Receive Only</option>
+                    <option value="debit">Release Only</option>
+                </select>
+                <div class="flex flex-col gap-1">
+                    <label for="filter-date-from" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase px-1">From</label>
+                    <input type="date" id="filter-date-from" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-amber-500 outline-none" onchange="app.applyFilters()">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label for="filter-date-to" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase px-1">To</label>
+                    <input type="date" id="filter-date-to" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-amber-500 outline-none" onchange="app.applyFilters()">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase px-1">Clear</label>
+                    <button onclick="app.clearFilters()" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 hover:bg-rose-50 dark:hover:bg-slate-700 hover:border-rose-300 hover:text-rose-500 text-sm font-medium transition-colors flex items-center gap-1">
+                        <i class="ph ph-x"></i><span class="hidden sm:inline text-xs">Reset</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i class="ph ph-wallet text-sm"></i> Balance</p>
+                    <h3 class="text-xl font-bold text-slate-800 dark:text-white" id="total-balance">₱0.00</h3>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i class="ph ph-arrow-down text-sm"></i> Received</p>
+                    <h3 class="text-xl font-bold text-emerald-600 dark:text-emerald-400" id="total-credit">₱0.00</h3>
+                    <p class="text-[10px] mt-1" id="mom-credit"></p>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i class="ph ph-arrow-up text-sm"></i> Released</p>
+                    <h3 class="text-xl font-bold text-rose-600 dark:text-rose-400" id="total-debit">₱0.00</h3>
+                    <p class="text-[10px] mt-1" id="mom-debit"></p>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm fade-in">
+                    <p class="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase flex items-center gap-1"><i class="ph ph-list-bullets text-sm"></i> Transactions</p>
+                    <h3 class="text-xl font-bold text-blue-600 dark:text-blue-400" id="total-count">0</h3>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <!-- Chart -->
+                <div class="lg:col-span-2 bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200">Cash Flow Trends</h3>
+                        <select id="chart-period" class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700" onchange="app.updateChart()">
+                            <option value="7">Last 7 Days</option>
+                            <option value="14">Last 14 Days</option>
+                            <option value="30">Last 30 Days</option>
+                        </select>
+                    </div>
+                    <div class="chart-container"><canvas id="profitChart"></canvas></div>
+                </div>
+                <!-- Status Panel -->
+                <div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                    <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Financial Status</h3>
+                    <div class="space-y-3">
+                        <div class="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Net Profit</p>
+                            <p class="text-lg font-bold" id="net-profit">₱0.00</p>
+                        </div>
+                        <div class="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Avg Transaction</p>
+                            <p class="text-lg font-bold text-slate-700 dark:text-slate-300" id="avg-transaction">₱0.00</p>
+                        </div>
+                        <!-- Break-even indicator -->
+                        <div class="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                            <p class="text-[10px] text-slate-500 uppercase font-bold">Break-Even</p>
+                            <p class="text-sm font-bold" id="break-even">-</p>
+                        </div>
+                        <div id="cash-flow-review" class="p-3 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 text-xs font-medium flex items-center gap-2">
+                            <i class="ph ph-info"></i> Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="flex flex-col" style="min-height:0">
+                <div class="overflow-hidden flex-1 flex flex-col">
+                    <div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div class="overflow-y-auto scroller" style="max-height:540px">
+                            <table class="w-full text-xs text-left table-fixed">
+                                <thead class="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 text-slate-500 uppercase text-[10px]">
+                                    <tr>
+                                        <th class="px-2 py-3 w-[28px]">
+                                            <input type="checkbox" id="select-all" class="row-checkbox" onchange="app.selectAll(this.checked)">
+                                        </th>
+                                        <th class="px-2 py-3 w-[68px]">Date</th>
+                                        <th class="px-2 py-3 w-[140px]">Name</th>
+                                        <th class="px-2 py-3 text-right w-[100px]">Out</th>
+                                        <th class="px-2 py-3 text-right w-[100px]">In</th>
+                                        <th class="px-2 py-3 text-right w-[100px]">Bal</th>
+                                        <th class="px-2 py-3 text-center w-[48px]">Act</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ledger-body" class="divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+                            </table>
+                        </div>
+                        <div id="empty-state" class="hidden flex-col items-center justify-center py-10 text-slate-400">
+                            <i class="ph ph-files text-3xl mb-2"></i><p class="text-xs">No records found.</p>
+                        </div>
+                        <div id="pagination" class="hidden border-t border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between text-xs">
+                            <div class="text-slate-500">Showing <span id="page-info">0</span> entries</div>
+                            <div class="flex gap-2">
+                                <button onclick="app.prevPage()" id="prev-btn" class="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"><i class="ph ph-caret-left"></i></button>
+                                <button onclick="app.nextPage()" id="next-btn" class="px-3 py-1 rounded border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50"><i class="ph ph-caret-right"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Mobile Bottom Nav -->
+<div id="mobile-nav" class="justify-around">
+    <button onclick="app.switchToDashboard()" class="flex flex-col items-center gap-1 text-amber-400 px-3 py-2">
+        <i class="ph ph-chart-line-up text-xl"></i><span class="text-[10px]">Dashboard</span>
+    </button>
+    <button onclick="app.fetchSheetData()" class="flex flex-col items-center gap-1 text-emerald-400 px-3 py-2">
+        <i class="ph ph-cloud-arrow-down text-xl"></i><span class="text-[10px]">Sync</span>
+    </button>
+    <button onclick="app.openMonthlyReport()" class="flex flex-col items-center gap-1 text-slate-400 px-3 py-2">
+        <i class="ph ph-files text-xl"></i><span class="text-[10px]">Reports</span>
+    </button>
+    <button onclick="app.openPendingApprovals()" class="flex flex-col items-center gap-1 text-orange-400 px-3 py-2 relative">
+        <i class="ph ph-clock-countdown text-xl"></i><span class="text-[10px]">Pending</span>
+    </button>
+    <button onclick="app.openActivityLog()" class="flex flex-col items-center gap-1 text-slate-400 px-3 py-2">
+        <i class="ph ph-list-dashes text-xl"></i><span class="text-[10px]">Activity</span>
+    </button>
+    <button onclick="app.showSettings()" class="flex flex-col items-center gap-1 text-slate-400 px-3 py-2">
+        <i class="ph ph-gear text-xl"></i><span class="text-[10px]">Settings</span>
+    </button>
+</div>
+
+<!-- MODALS -->
+
+<!-- Monthly Report -->
+<div id="report-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('report-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-5 slide-down">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Monthly Summary</h3>
+            <div class="flex gap-2">
+                <button onclick="app.printReport()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium hover:bg-slate-200"><i class="ph ph-printer mr-1"></i>Print</button>
+                <button onclick="app.closeModal('report-modal')" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><i class="ph ph-x text-xl"></i></button>
+            </div>
+        </div>
+        <!-- Month-over-month comparison -->
+        <div id="mom-panel" class="grid grid-cols-3 gap-3 mb-4"></div>
+        <!-- Per-person summary -->
+        <div class="mb-4">
+            <button onclick="app.togglePersonSummary()" class="text-xs font-bold text-amber-600 flex items-center gap-1 mb-2">
+                <i class="ph ph-users"></i> <span id="person-toggle-text">Show Per-Person Summary</span>
+            </button>
+            <div id="person-summary" class="hidden max-h-40 overflow-y-auto scroller">
+                <table class="w-full text-xs"><thead class="text-slate-500 uppercase text-[10px]"><tr><th class="py-1 text-left">Name</th><th class="py-1 text-right">Received</th><th class="py-1 text-right">Released</th><th class="py-1 text-right">Net</th></tr></thead><tbody id="person-body"></tbody></table>
+            </div>
+        </div>
+        <div class="max-h-64 overflow-y-auto scroller">
+            <table class="w-full text-xs text-left">
+                <thead class="bg-slate-50 dark:bg-slate-900 sticky top-0"><tr>
+                    <th class="px-3 py-2">Month</th>
+                    <th class="px-3 py-2 text-right">Received</th>
+                    <th class="px-3 py-2 text-right">Released</th>
+                    <th class="px-3 py-2 text-right">Net</th>
+                </tr></thead>
+                <tbody id="report-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Modal -->
+<div id="receipt-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('receipt-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm p-5 slide-down">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">Transaction Receipt</h3>
+            <div class="flex gap-2">
+                <button onclick="app.printReceipt()" class="px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded-lg text-xs font-medium"><i class="ph ph-printer mr-1"></i>Print</button>
+                <button onclick="app.closeModal('receipt-modal')" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><i class="ph ph-x text-xl"></i></button>
+            </div>
+        </div>
+        <div id="receipt-body" class="text-sm space-y-3"></div>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('settings-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-5 slide-down">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">Settings</h3>
+            <button onclick="app.closeModal('settings-modal')" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><i class="ph ph-x text-xl"></i></button>
+        </div>
+        <div class="space-y-5 max-h-[75vh] overflow-y-auto scroller pr-1">
+            <!-- Connection -->
+            <div class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl space-y-3">
+                <p class="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase flex items-center gap-1"><i class="ph ph-lock-key"></i> Connection — stored locally only</p>
+                <div>
+                    <label class="block text-xs font-medium mb-1">Apps Script URL</label>
+                    <input type="password" id="conn-script-url" placeholder="https://script.google.com/macros/s/..." class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium mb-1">Secret Token *</label>
+                    <input type="password" id="conn-token" placeholder="min. 12 characters" class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-xs focus:ring-2 focus:ring-amber-500 outline-none">
+                </div>
+            </div>
+            <!-- General -->
+            <div class="space-y-3">
+                <p class="text-xs font-bold text-slate-500 uppercase">General</p>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Starting Capital</label>
+                    <div class="relative"><span class="absolute left-3 top-2.5 text-slate-400">₱</span>
+                    <input type="number" id="starting-capital" step="0.01" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 border pl-7 pr-3 py-2 text-sm"></div>
+                </div>
+            </div>
+            <!-- Alerts -->
+            <div class="space-y-3">
+                <p class="text-xs font-bold text-slate-500 uppercase">Alerts</p>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Low Balance Warning (₱)</label>
+                    <div class="relative"><span class="absolute left-3 top-2.5 text-slate-400">₱</span>
+                    <input type="number" id="low-balance-threshold" placeholder="e.g. 10000" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 border pl-7 pr-3 py-2 text-sm"></div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Large Transaction Flag (₱)</label>
+                    <div class="relative"><span class="absolute left-3 top-2.5 text-slate-400">₱</span>
+                    <input type="number" id="large-tx-threshold" placeholder="e.g. 100000" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 border pl-7 pr-3 py-2 text-sm"></div>
+                </div>
+            </div>
+            <!-- Capital Goal -->
+            <div class="space-y-3">
+                <p class="text-xs font-bold text-slate-500 uppercase">Capital Goal</p>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Target Capital (₱)</label>
+                    <div class="relative"><span class="absolute left-3 top-2.5 text-slate-400">₱</span>
+                    <input type="number" id="capital-goal" placeholder="e.g. 500000" class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 border pl-7 pr-3 py-2 text-sm"></div>
+                </div>
+            </div>
+
+            <!-- Data -->
+            <div class="space-y-2">
+                <p class="text-xs font-bold text-slate-500 uppercase">Data Management</p>
+                <button onclick="app.importBackup()" class="w-full px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium"><i class="ph ph-upload-simple mr-1"></i>Import Backup</button>
+                <button onclick="app.clearAllData()" class="w-full px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg text-sm font-medium"><i class="ph ph-trash mr-1"></i>Clear All Data</button>
+            </div>
+            <!-- Apps Script snippet -->
+            <div class="p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl">
+                <p class="text-[10px] font-bold text-slate-500 uppercase mb-2 flex items-center gap-1"><i class="ph ph-code"></i> Paste into Apps Script</p>
+                <pre class="text-[10px] text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed font-mono overflow-x-auto">const SECRET = "YOUR_TOKEN_HERE";
+const ADMIN_EMAIL = "your-email@example.com"; // Change this to your email
+
+function doGet(e) {
+  if (e.parameter.token !== SECRET)
+    return resp(JSON.stringify({success:false,message:"Unauthorized"}),true);
+
+  const action = e.parameter.action || "read";
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // LOGIN
+  if (action === "login") {
+    const loginSheet = ss.getSheetByName("Login");
+    if (!loginSheet)
+      return resp(JSON.stringify({success:false,message:"Login sheet not found"}),true);
+    const rows = loginSheet.getDataRange().getValues();
+    const user = e.parameter.username || "";
+    const pass = e.parameter.password || "";
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]).trim() === user &&
+          String(rows[i][1]).trim() === pass)
+        return resp(JSON.stringify({success:true}),true);
+    }
+    return resp(JSON.stringify({success:false,message:"Incorrect username or password."}),true);
+  }
+
+  // GET PENDING
+  if (action === "getPending") {
+    const ps = ss.getSheetByName("Pending");
+    if (!ps) return resp(JSON.stringify([]),true);
+    const rows = ps.getDataRange().getValues();
+    return resp(JSON.stringify(rows),true);
+  }
+
+  // GET MY PENDING
+  if (action === "getMyPending") {
+    const ps = ss.getSheetByName("Pending");
+    if (!ps) return resp(JSON.stringify([]),true);
+    const rows = ps.getDataRange().getValues();
+    const user = e.parameter.username || "";
+    const filtered = rows.filter((r,i) => i===0 || String(r[4]).trim()===user);
+    return resp(JSON.stringify(filtered),true);
+  }
+
+  // GET ACTIVITY LOG
+  if (action === "getActivity") {
+    const al = ss.getSheetByName("ActivityLog");
+    if (!al) return resp(JSON.stringify([]),true);
+    const rows = al.getDataRange().getValues();
+    return resp(JSON.stringify(rows),true);
+  }
+
+  // READ main data
+  const sheet = ss.getActiveSheet();
+  const rows = sheet.getDataRange().getValues();
+  return ContentService
+    .createTextOutput(JSON.stringify(rows))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function doPost(e) {
+  const data = JSON.parse(e.postData.contents);
+  if (data.token !== SECRET)
+    return resp("Unauthorized");
+
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const action = data.action || "write";
+
+  // SUBMIT PENDING
+  if (action === "submitPending") {
+    let ps = ss.getSheetByName("Pending");
+    if (!ps) {
+      ps = ss.insertSheet("Pending");
+      ps.appendRow(["ID","Date","Name","Amount","SubmittedBy","Status","SubmittedAt"]);
+    }
+    const id = "P" + Date.now();
+    ps.appendRow([
+      id, data.date, data.name, data.amount,
+      data.submittedBy || "", "Pending", new Date().toISOString()
+    ]);
+    
+    // Log activity
+    logActivity(ss, data.submittedBy || "User", "Submit", 
+      `Submitted ₱${data.amount} for ${data.name}`, id);
+    
+    // Send email notification
+    try {
+      MailApp.sendEmail({
+        to: ADMIN_EMAIL,
+        subject: "⏳ New Pending Approval - Copra Trade",
+        body: `A new transaction has been submitted for approval:
+
+Name: ${data.name}
+Amount: ₱${data.amount}
+Submitted by: ${data.submittedBy}
+Date: ${data.date}
+
+Log in to Dashboard to approve or reject.`
+      });
+    } catch(err) { Logger.log("Email failed: " + err); }
+    
+    return resp(JSON.stringify({success:true,id:id}),true);
+  }
+
+  // APPROVE PENDING
+  if (action === "approvePending") {
+    const ps = ss.getSheetByName("Pending");
+    if (!ps) return resp("No Pending sheet");
+    const rows = ps.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(data.id)) {
+        ps.getRange(i+1, 6).setValue("Approved");
+        const mainSheet = ss.getActiveSheet();
+        mainSheet.appendRow([
+          rows[i][1], rows[i][2], "Release", rows[i][3],
+          "", new Date().toISOString(), ""
+        ]);
+        logActivity(ss, data.user || "Admin", "Approve", 
+          `Approved ₱${rows[i][3]} for ${rows[i][2]}`, data.id);
+        return resp(JSON.stringify({success:true}),true);
+      }
+    }
+    return resp(JSON.stringify({success:false,message:"ID not found"}),true);
+  }
+
+  // REJECT PENDING
+  if (action === "rejectPending") {
+    const ps = ss.getSheetByName("Pending");
+    if (!ps) return resp("No Pending sheet");
+    const rows = ps.getDataRange().getValues();
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(data.id)) {
+        ps.getRange(i+1, 6).setValue("Rejected");
+        logActivity(ss, data.user || "Admin", "Reject", 
+          `Rejected ₱${rows[i][3]} for ${rows[i][2]}`, data.id);
+        return resp(JSON.stringify({success:true}),true);
+      }
+    }
+    return resp(JSON.stringify({success:false,message:"ID not found"}),true);
+  }
+
+  // LOG ACTIVITY (manual log from Dashboard)
+  if (action === "logActivity") {
+    logActivity(ss, data.user || "Unknown", data.actionType || "Action", 
+      data.details || "", data.txId || "");
+    return resp(JSON.stringify({success:true}),true);
+  }
+
+  // Default WRITE
+  const sheet = ss.getActiveSheet();
+  sheet.appendRow([
+    data.date, data.name, data.type,
+    data.amount, "", new Date().toISOString(),
+    data.notes || ""
+  ]);
+  
+  // Log activity
+  logActivity(ss, data.user || "Admin", "Add", 
+    `Added ${data.type} ₱${data.amount} for ${data.name}`, "");
+  
+  return resp("OK");
+}
+
+function logActivity(ss, user, action, details, txId) {
+  let al = ss.getSheetByName("ActivityLog");
+  if (!al) {
+    al = ss.insertSheet("ActivityLog");
+    al.appendRow(["Timestamp","User","Action","Details","TransactionID"]);
+  }
+  al.appendRow([new Date().toISOString(), user, action, details, txId]);
+}
+
+function resp(msg, json) {
+  const out = ContentService.createTextOutput(
+    typeof msg === "string" ? msg : JSON.stringify(msg)
+  );
+  if (json) out.setMimeType(ContentService.MimeType.JSON);
+  return out;
+}</pre>
+            </div>
+            <button onclick="app.saveConnectionSettings()" class="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg text-sm"><i class="ph ph-floppy-disk mr-1"></i>Save Settings</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- Pending Approvals Modal -->
+<div id="pending-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('pending-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl p-5 slide-down">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg flex items-center gap-2"><i class="ph ph-clock-countdown text-orange-500"></i> Pending Approvals</h3>
+            <button onclick="app.closeModal('pending-modal')" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><i class="ph ph-x text-xl"></i></button>
+        </div>
+        <div id="pending-list" class="space-y-3 max-h-[60vh] overflow-y-auto scroller">
+            <p class="text-slate-400 text-sm text-center py-8">Loading...</p>
+        </div>
+    </div>
+</div>
+
+
+<!-- Activity Log Modal -->
+<div id="activity-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('activity-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-3xl p-5 slide-down">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg flex items-center gap-2"><i class="ph ph-list-dashes text-blue-500"></i> Activity Log</h3>
+            <div class="flex gap-2 items-center">
+                <select id="activity-filter" onchange="app.filterActivityLog()" class="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700">
+                    <option value="all">All Actions</option>
+                    <option value="Add">Add</option>
+                    <option value="Edit">Edit</option>
+                    <option value="Delete">Delete</option>
+                    <option value="Approve">Approve</option>
+                    <option value="Reject">Reject</option>
+                </select>
+                <button onclick="app.closeModal('activity-modal')" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"><i class="ph ph-x text-xl"></i></button>
+            </div>
+        </div>
+        <div class="overflow-y-auto scroller max-h-[60vh]">
+            <table class="w-full text-xs">
+                <thead class="bg-slate-50 dark:bg-slate-900 sticky top-0">
+                    <tr class="text-left text-slate-500 uppercase text-[10px]">
+                        <th class="px-3 py-2">Time</th>
+                        <th class="px-3 py-2">User</th>
+                        <th class="px-3 py-2">Action</th>
+                        <th class="px-3 py-2">Details</th>
+                    </tr>
+                </thead>
+                <tbody id="activity-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Notifications Dropdown -->
+<div id="notif-dropdown" class="hidden fixed top-16 right-4 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 z-[9998] slide-down">
+    <div class="p-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+        <h4 class="font-bold text-sm">Notifications</h4>
+        <button onclick="app.clearNotifications()" class="text-xs text-slate-400 hover:text-amber-500">Clear All</button>
+    </div>
+    <div id="notif-list" class="divide-y divide-slate-100 dark:divide-slate-700 max-h-96 overflow-y-auto scroller">
+        <p class="text-slate-400 text-xs text-center py-8">No new notifications</p>
+    </div>
+</div>
+
+<!-- Confirm Dialog -->
+<div id="confirm-modal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden flex items-center justify-center p-4" onclick="if(event.target===this)app.closeModal('confirm-modal')">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-sm p-5 slide-down">
+        <h3 class="font-bold text-lg mb-2" id="confirm-title">Confirm</h3>
+        <p class="text-sm text-slate-600 dark:text-slate-400 mb-4" id="confirm-message">Are you sure?</p>
+        <div class="flex gap-2">
+            <button onclick="app.closeModal('confirm-modal')" class="flex-1 px-4 py-2 bg-slate-200 dark:bg-slate-700 rounded-lg text-sm font-medium">Cancel</button>
+            <button id="confirm-action" class="flex-1 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="fixed bottom-20 md:bottom-4 left-1/2 -translate-x-1/2 md:left-auto md:right-5 md:translate-x-0 transform translate-y-20 opacity-0 transition-all duration-300 z-[9999]">
+    <div class="bg-slate-800 text-white px-5 py-3 rounded-full shadow-2xl flex items-center gap-2">
+        <i class="ph ph-info text-amber-400" id="toast-icon"></i>
+        <span id="toast-message" class="text-xs font-bold">Done</span>
+    </div>
+</div>
+
+<script>
+const CopraApp = (function() {
+    'use strict';
+
+    const CONFIG = {
+        STORAGE_KEY: 'copraTransactions',
+        HISTORY_KEY: 'copraHistory',
+        THEME_KEY: 'copraTheme',
+        SETTINGS_KEY: 'copraSettings',
+        CONN_KEY: 'copraConnection',
+        ITEMS_PER_PAGE: 50
+    };
+
+    function getConnection() {
+        try { return JSON.parse(localStorage.getItem(CONFIG.CONN_KEY)) || {}; }
+        catch { return {}; }
+    }
+
+    let state = {
+        transactions: [], filteredTransactions: [],
+        chartInstance: null, currentPage: 1,
+        confirmCallback: null, selectedIds: new Set(),
+        lastDeleted: null, undoTimer: null,
+        loggedIn: false,
+        currentUser: '',
+        notifications: [],
+        activityLog: [],
+        lastPendingCount: 0,
+        personSummaryVisible: false,
+        settings: {
+            startingCapital: 0, lowBalanceThreshold: 0,
+            largeTxThreshold: 0, capitalGoal: 0, pin: ''
+        }
+    };
+
+    // ── INIT ──────────────────────────────────────────────────────────────────
+    function init() {
+        loadFromStorage();
+        setupEventListeners();
+        setDefaultDate();
+        applyTheme();
+        applyFilters();
+        setupCharacterCounters();
+        showLoginIfNeeded();
+    }
+
+    function loadFromStorage() {
+        try {
+            state.transactions = JSON.parse(localStorage.getItem(CONFIG.STORAGE_KEY)) || [];
+            state.settings = Object.assign(state.settings, JSON.parse(localStorage.getItem(CONFIG.SETTINGS_KEY)) || {});
+            state.transactions = state.transactions.filter(t =>
+                t && t.date && t.name && t.amount && (t.type === 'credit' || t.type === 'debit')
+            );
+        } catch(e) { showToast('Error loading data','error'); }
+    }
+
+    function saveToStorage() {
+        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(state.transactions));
+        localStorage.setItem(CONFIG.SETTINGS_KEY, JSON.stringify(state.settings));
+    }
+
+    function setupEventListeners() {
+        document.addEventListener('keydown', e => {
+            if ((e.ctrlKey||e.metaKey) && e.key==='s') { e.preventDefault(); exportToCSV(); }
+            if ((e.ctrlKey||e.metaKey) && e.key==='f') { e.preventDefault(); document.getElementById('search-input').focus(); }
+            if (e.key==='Escape') closeAllModals();
+        });
+
+    }
+
+    function setupCharacterCounters() {
+        const n = document.getElementById('t-name');
+        const no = document.getElementById('t-notes');
+        if(n) n.addEventListener('input', () => document.getElementById('name-counter').textContent = n.value.length);
+        if(no) no.addEventListener('input', () => document.getElementById('notes-counter').textContent = no.value.length);
+    }
+
+    function setDefaultDate() {
+        const d = document.getElementById('t-date');
+        if(d) d.valueAsDate = new Date();
+    }
+
+    // ── LOGIN ─────────────────────────────────────────────────────────────────
+    function showLoginIfNeeded() {
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) return; // not configured yet, skip
+        // Stay logged in across refreshes within the same browser session
+        if(sessionStorage.getItem('copraLoggedIn') === '1') {
+            state.loggedIn = true;
+            return;
+        }
+        showLoginOverlay();
+    }
+
+    function showLoginOverlay() {
+        document.getElementById('login-username').value = '';
+        document.getElementById('login-password').value = '';
+        document.getElementById('login-error').textContent = '';
+        document.getElementById('login-overlay').classList.remove('hidden');
+        setTimeout(() => document.getElementById('login-username').focus(), 100);
+    }
+
+    async function submitLogin() {
+        const username = document.getElementById('login-username').value.trim();
+        const password = document.getElementById('login-password').value;
+        const errEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
+
+        if(!username || !password) {
+            errEl.textContent = 'Please enter both username and password.';
+            return;
+        }
+
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) {
+            // No connection configured — skip login and go straight in
+            document.getElementById('login-overlay').classList.add('hidden');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Signing in...';
+        errEl.textContent = '';
+
+        try {
+            const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=login&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`;
+            const res = await fetch(url);
+            const text = await res.text().catch(() => '');
+            let result;
+            try { result = JSON.parse(text); } catch { result = { success: false }; }
+
+            if(result.success) {
+                state.loggedIn = true;
+                sessionStorage.setItem('copraLoggedIn', '1');
+                document.getElementById('login-overlay').classList.add('hidden');
+                showToast(`Welcome, ${username}!`, 'success');
+            } else {
+                errEl.textContent = result.message || 'Incorrect username or password.';
+            }
+        } catch(e) {
+            errEl.textContent = 'Connection error. Check your Apps Script URL.';
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="ph ph-sign-in"></i> Sign In';
+        }
+    }
+
+    function openSettingsFromLogin() {
+        // Hide login, open settings — user can copy the Apps Script snippet
+        // then come back and log in properly
+        document.getElementById('login-overlay').classList.add('hidden');
+        showSettings();
+        // Re-show login when settings modal is closed
+        const orig = closeModal;
+        const settingsModal = document.getElementById('settings-modal');
+        const observer = new MutationObserver(() => {
+            if(settingsModal.classList.contains('hidden')) {
+                observer.disconnect();
+                showLoginOverlay();
+            }
+        });
+        observer.observe(settingsModal, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    // ── GOOGLE SHEETS ─────────────────────────────────────────────────────────
+    async function fetchSheetData() {
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) {
+            showToast('Configure connection in Settings first.','warning');
+            showSettings(); return;
+        }
+        const btn = document.getElementById('sync-btn');
+        const icon = document.getElementById('sync-icon');
+        try {
+            showToast('Syncing...','info');
+            icon.classList.add('animate-spin');
+            btn.disabled = true;
+            const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=read`;
+            const res = await fetch(url);
+            const text = await res.text();
+            let rows;
+            try { rows = JSON.parse(text); } catch { throw new Error('Apps Script did not return valid JSON.'); }
+            if(!Array.isArray(rows)) throw new Error('Unexpected response from Apps Script.');
+            const dataRows = rows.length > 0 && isNaN(rows[0][3]) && !/release|receive/i.test(rows[0][2]) ? rows.slice(1) : rows;
+            const parseAmt = v => parseFloat((v||'').toString().replace(/,/g,'')) || 0;
+            const newTx = dataRows
+                .map((c,i) => ({ id: Date.now()+i, date:(c[0]||'').toString().trim(), name:(c[1]||'').toString().trim(), type:(c[2]||'').toString().trim(), amount:parseAmt(c[3]), notes:(c[6]||'').toString().trim() }))
+                .filter(r => r.name.length>=1 && r.amount>0 && /release|receive|debit|credit/i.test(r.type))
+                .map(r => ({ ...r, type:/receive|credit/i.test(r.type)?'credit':'debit' }));
+            if(!newTx.length) { showToast('Sheet is empty or has no valid rows.','warning'); return; }
+            if(confirm(`Import ${newTx.length} records? This replaces current data.`)) {
+                state.transactions = newTx;
+                saveToStorage(); applyFilters();
+                showToast(`Synced ${newTx.length} records!`,'success');
+            }
+        } catch(e) {
+            showToast(e.message||'Sync failed.','error');
+        } finally { icon.classList.remove('animate-spin'); btn.disabled = false; }
+    }
+
+    async function syncToGoogleSheet(tx) {
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) return;
+        const payload = { token:conn.secretToken, date:tx.date, name:tx.name, type:tx.type==='credit'?'Receive':'Release', amount:tx.amount, notes:tx.notes||'' };
+        try {
+            await fetch(conn.scriptUrl, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+            showToast('Saved to Google Sheet ✓','success');
+        } catch { showToast('Saved locally. Sheet sync failed.','warning'); }
+    }
+
+    // ── FORM ──────────────────────────────────────────────────────────────────
+    function handleFormSubmit(e) {
+        e.preventDefault();
+        const tx = {
+            id: Date.now(),
+            date: document.getElementById('t-date').value,
+            name: sanitize(document.getElementById('t-name').value),
+            type: document.querySelector('input[name="t-type"]:checked').value,
+            amount: parseFloat(document.getElementById('t-amount').value),
+            notes: sanitize(document.getElementById('t-notes').value||'')
+        };
+        if(!validate(tx)) return;
+
+        // Flag large transaction
+        if(state.settings.largeTxThreshold > 0 && tx.amount >= state.settings.largeTxThreshold) {
+            if(!confirm(`⚠️ This is a large transaction of ₱${tx.amount.toLocaleString()}. Continue?`)) return;
+        }
+
+        state.transactions.push(tx);
+        saveToStorage();
+        syncToGoogleSheet(tx);
+        resetForm();
+        applyFilters();
+        showToast('Transaction added!','success');
+    }
+
+    function validate(tx) {
+        if(!tx.date) { showToast('Please select a date','error'); return false; }
+        if(!tx.name || tx.name.trim().length < 2) { showToast('Name must be at least 2 characters','error'); return false; }
+        if(!tx.amount || tx.amount <= 0) { showToast('Amount must be greater than 0','error'); return false; }
+        return true;
+    }
+
+    function sanitize(s) { return s.trim().replace(/[<>]/g,''); }
+
+    function resetForm() {
+        document.getElementById('transaction-form').reset();
+        document.getElementById('t-id').value = '';
+        document.getElementById('btn-text').textContent = 'Add Record';
+        document.getElementById('btn-submit').className = 'w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-lg shadow-md transition-all text-sm flex items-center justify-center gap-2';
+        setDefaultDate();
+        document.getElementById('name-counter').textContent = '0';
+        document.getElementById('notes-counter').textContent = '0';
+    }
+
+    // ── FILTERS & PAGINATION ──────────────────────────────────────────────────
+    function applyFilters() {
+        const q = document.getElementById('search-input').value.toLowerCase();
+        const ft = document.getElementById('filter-type').value;
+        const from = document.getElementById('filter-date-from').value;
+        const to = document.getElementById('filter-date-to').value;
+        state.filteredTransactions = state.transactions.filter(t => {
+            if(q && !t.name.toLowerCase().includes(q)) return false;
+            if(ft !== 'all' && t.type !== ft) return false;
+            if(from && t.date < from) return false;
+            if(to && t.date > to) return false;
+            return true;
+        });
+        state.currentPage = 1;
+        renderTable();
+    }
+
+    function clearFilters() {
+        document.getElementById('search-input').value = '';
+        document.getElementById('filter-type').value = 'all';
+        document.getElementById('filter-date-from').value = '';
+        document.getElementById('filter-date-to').value = '';
+        applyFilters();
+    }
+
+    function prevPage() { if(state.currentPage>1){ state.currentPage--; renderTable(); } }
+    function nextPage() {
+        const total = Math.ceil(state.filteredTransactions.length/CONFIG.ITEMS_PER_PAGE);
+        if(state.currentPage<total){ state.currentPage++; renderTable(); }
+    }
+
+    // ── RENDER ────────────────────────────────────────────────────────────────
+    function renderTable() {
+        const body = document.getElementById('ledger-body');
+        body.innerHTML = '';
+        let bal=0, credit=0, debit=0;
+        const sorted = [...state.filteredTransactions].sort((a,b) => new Date(a.date)-new Date(b.date));
+        const withBal = sorted.map(t => {
+            if(t.type==='credit'){bal+=t.amount;credit+=t.amount;}else{bal-=t.amount;debit+=t.amount;}
+            return {...t, balance:bal};
+        }).reverse();
+        if(!withBal.length) {
+            document.getElementById('empty-state').classList.remove('hidden');
+            document.getElementById('pagination').classList.add('hidden');
+        } else {
+            document.getElementById('empty-state').classList.add('hidden');
+            const start = (state.currentPage-1)*CONFIG.ITEMS_PER_PAGE;
+            withBal.slice(start, start+CONFIG.ITEMS_PER_PAGE).forEach(t => body.appendChild(createRow(t)));
+            updatePagination(withBal.length);
+        }
+        updateStats(bal, credit, debit, withBal.length);
+        updateChart();
+        checkAlerts(bal);
+    }
+
+    function createRow(t) {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors fade-in swipe-row';
+        tr.dataset.id = t.id;
+        const fmt = new Date(t.date).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'});
+        const chk = state.selectedIds.has(t.id) ? 'checked' : '';
+        tr.innerHTML = `
+            <td class="px-2 py-3"><input type="checkbox" class="row-checkbox" ${chk} onchange="app.toggleSelect(${t.id},this.checked)"></td>
+            <td class="px-2 py-3 text-slate-500 whitespace-nowrap text-xs">${fmt}</td>
+            <td class="px-2 py-3 font-medium truncate" title="${t.name}${t.notes?'\nNotes: '+t.notes:''}">
+                ${t.name}${t.notes?'<i class="ph ph-note-pencil text-slate-400 ml-1 text-[10px]"></i>':''}
+            </td>
+            <td class="px-2 py-3 text-right text-rose-500 font-bold text-xs whitespace-nowrap">${t.type==='debit'?'₱'+t.amount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'-'}</td>
+            <td class="px-2 py-3 text-right text-emerald-500 font-bold text-xs whitespace-nowrap">${t.type==='credit'?'₱'+t.amount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'-'}</td>
+            <td class="px-2 py-3 text-right font-black text-xs whitespace-nowrap bg-slate-50/50 dark:bg-slate-900/50">₱${t.balance.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td class="px-2 py-3 text-center">
+                <div class="flex items-center justify-center gap-0.5">
+                    <button onclick="app.showReceipt(${t.id})" class="p-1 text-slate-400 hover:text-amber-500" title="Receipt"><i class="ph ph-receipt"></i></button>
+                    <button onclick="app.editTransaction(${t.id})" class="p-1 text-slate-400 hover:text-emerald-500" title="Edit"><i class="ph ph-pencil-simple"></i></button>
+                    <button onclick="app.deleteTransaction(${t.id})" class="p-1 text-slate-400 hover:text-red-500" title="Delete"><i class="ph ph-trash"></i></button>
+                </div>
+            </td>`;
+        // Swipe to delete (touch)
+        setupSwipe(tr, t.id);
+        return tr;
+    }
+
+    function setupSwipe(tr, id) {
+        let startX = 0, dx = 0;
+        tr.addEventListener('touchstart', e => { startX = e.touches[0].clientX; }, { passive:true });
+        tr.addEventListener('touchmove', e => {
+            dx = e.touches[0].clientX - startX;
+            if(dx < 0) {
+                const pct = Math.min(Math.abs(dx)/100, 1);
+                tr.style.transform = `translateX(${dx}px)`;
+                let bg = tr.querySelector('.swipe-delete-bg');
+                if(!bg) {
+                    bg = document.createElement('div');
+                    bg.className = 'swipe-delete-bg';
+                    bg.innerHTML = '<i class="ph ph-trash"></i> DELETE';
+                    tr.appendChild(bg);
+                }
+                bg.style.opacity = pct;
+            }
+        }, { passive:true });
+        tr.addEventListener('touchend', () => {
+            if(dx < -80) {
+                deleteTransaction(id);
+            } else {
+                tr.style.transform = '';
+                const bg = tr.querySelector('.swipe-delete-bg');
+                if(bg) bg.style.opacity = 0;
+            }
+            dx = 0;
+        });
+    }
+
+    function updatePagination(total) {
+        const pages = Math.ceil(total/CONFIG.ITEMS_PER_PAGE);
+        if(pages<=1){ document.getElementById('pagination').classList.add('hidden'); return; }
+        document.getElementById('pagination').classList.remove('hidden');
+        const s = (state.currentPage-1)*CONFIG.ITEMS_PER_PAGE+1;
+        const e = Math.min(s+CONFIG.ITEMS_PER_PAGE-1, total);
+        document.getElementById('page-info').textContent = `${s}-${e} of ${total}`;
+        document.getElementById('prev-btn').disabled = state.currentPage===1;
+        document.getElementById('next-btn').disabled = state.currentPage===pages;
+    }
+
+    const fmt = a => '₱'+a.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+    function updateStats(bal, credit, debit, count) {
+        document.getElementById('total-balance').textContent = fmt(bal);
+        document.getElementById('sidebar-balance').textContent = fmt(bal);
+        document.getElementById('total-credit').textContent = fmt(credit);
+        document.getElementById('total-debit').textContent = fmt(debit);
+        document.getElementById('total-count').textContent = count;
+        const net = credit-debit;
+        const el = document.getElementById('net-profit');
+        el.textContent = fmt(net);
+        el.className = `text-lg font-bold ${net>=0?'text-emerald-500':'text-rose-500'}`;
+        document.getElementById('avg-transaction').textContent = fmt(count>0?(credit+debit)/count:0);
+
+        // Break-even
+        const beEl = document.getElementById('break-even');
+        if(debit>0 && credit>0) {
+            const ratio = credit/debit;
+            beEl.textContent = ratio >= 1 ? `${(ratio*100).toFixed(0)}% covered` : `Need ₱${fmt(debit-credit)} more`;
+            beEl.className = `text-sm font-bold ${ratio>=1?'text-emerald-500':'text-amber-500'}`;
+        } else { beEl.textContent = '-'; beEl.className='text-sm font-bold text-slate-400'; }
+
+        // Cash flow review
+        const rev = document.getElementById('cash-flow-review');
+        if(credit>debit*1.2) rev.innerHTML='<i class="ph ph-check-circle-fill text-emerald-500"></i><span class="text-emerald-700 dark:text-emerald-400">Excellent Cash Flow</span>';
+        else if(credit>debit) rev.innerHTML='<i class="ph ph-check-circle text-emerald-500"></i><span>Positive Flow</span>';
+        else if(debit>credit*1.2) rev.innerHTML='<i class="ph ph-warning-fill text-rose-500"></i><span class="text-rose-700 dark:text-rose-400">High Release Rate</span>';
+        else rev.innerHTML='<i class="ph ph-warning text-amber-500"></i><span class="text-amber-700 dark:text-amber-400">Monitor Closely</span>';
+
+        updateMonthlySummary();
+        updateGoal(bal);
+        updateMoMBadges();
+    }
+
+    function updateMonthlySummary() {
+        const m = new Date().toISOString().slice(0,7);
+        const txs = state.transactions.filter(t=>t.date.startsWith(m));
+        let p=0; txs.forEach(t=>{ p += t.type==='credit'?t.amount:-t.amount; });
+        const el = document.getElementById('sidebar-monthly');
+        el.textContent = fmt(p);
+        el.className = `text-sm font-semibold ${p>=0?'text-emerald-400':'text-rose-400'}`;
+    }
+
+    function updateGoal(bal) {
+        const goal = state.settings.capitalGoal;
+        const sidebar = document.getElementById('goal-sidebar');
+        if(!goal){ sidebar.style.display='none'; return; }
+        sidebar.style.display='block';
+        const pct = Math.min((bal/goal)*100,100);
+        document.getElementById('goal-fill').style.width = pct+'%';
+        document.getElementById('goal-pct').textContent = `${pct.toFixed(1)}% of ${fmt(goal)}`;
+    }
+
+    function updateMoMBadges() {
+        const now = new Date();
+        const thisMo = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        const prev = new Date(now.getFullYear(), now.getMonth()-1, 1);
+        const prevMo = `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`;
+
+        let thisCr=0,thisDr=0,prevCr=0,prevDr=0;
+        state.transactions.forEach(t => {
+            const mo = t.date.slice(0,7);
+            if(mo===thisMo){ if(t.type==='credit') thisCr+=t.amount; else thisDr+=t.amount; }
+            if(mo===prevMo){ if(t.type==='credit') prevCr+=t.amount; else prevDr+=t.amount; }
+        });
+
+        const badge = (curr, prev) => {
+            if(!prev) return '';
+            const diff = ((curr-prev)/prev*100).toFixed(1);
+            const up = curr>=prev;
+            return `<span class="${up?'mom-up':'mom-down'}">${up?'▲':'▼'} ${Math.abs(diff)}% vs last mo</span>`;
+        };
+        document.getElementById('mom-credit').innerHTML = badge(thisCr, prevCr);
+        document.getElementById('mom-debit').innerHTML = badge(thisDr, prevDr);
+    }
+
+    // ── ALERTS ────────────────────────────────────────────────────────────────
+    function checkAlerts(bal) {
+        const banner = document.getElementById('alert-banner');
+        const low = state.settings.lowBalanceThreshold;
+        if(low > 0 && bal <= low && bal >= 0) {
+            banner.className = 'mb-4 p-3 rounded-xl border flex items-center gap-2 text-sm font-medium slide-down bg-amber-50 dark:bg-amber-900/20 border-amber-300 text-amber-700 dark:text-amber-400';
+            banner.innerHTML = `<i class="ph ph-warning-fill text-xl"></i> Low balance warning: current capital is ${fmt(bal)}, below your threshold of ${fmt(low)}.`;
+            banner.classList.remove('hidden');
+        } else if(bal < 0) {
+            banner.className = 'mb-4 p-3 rounded-xl border flex items-center gap-2 text-sm font-medium slide-down bg-rose-50 dark:bg-rose-900/20 border-rose-300 text-rose-700 dark:text-rose-400';
+            banner.innerHTML = `<i class="ph ph-x-circle-fill text-xl"></i> Negative balance! Capital is ${fmt(bal)}.`;
+            banner.classList.remove('hidden');
+        } else {
+            banner.classList.add('hidden');
+        }
+    }
+
+    // ── CHART ─────────────────────────────────────────────────────────────────
+    function updateChart() {
+        const canvas = document.getElementById('profitChart');
+        if(!canvas) return;
+        const period = parseInt(document.getElementById('chart-period').value)||7;
+        const sorted = [...state.filteredTransactions].sort((a,b)=>new Date(a.date)-new Date(b.date));
+        const grouped = {};
+        sorted.slice(-period).forEach(t => {
+            if(!grouped[t.date]) grouped[t.date]={in:0,out:0};
+            if(t.type==='credit') grouped[t.date].in+=t.amount; else grouped[t.date].out+=t.amount;
+        });
+        const labels = Object.keys(grouped);
+        if(state.chartInstance) state.chartInstance.destroy();
+        state.chartInstance = new Chart(canvas.getContext('2d'), {
+            type:'bar',
+            data:{ labels:labels.map(l=>new Date(l).toLocaleDateString('en-US',{month:'short',day:'numeric'})),
+                datasets:[
+                    {label:'Received',data:labels.map(l=>grouped[l].in),backgroundColor:'rgba(16,185,129,0.8)',borderColor:'rgb(16,185,129)',borderWidth:1},
+                    {label:'Released',data:labels.map(l=>grouped[l].out),backgroundColor:'rgba(225,29,72,0.8)',borderColor:'rgb(225,29,72)',borderWidth:1}
+                ]},
+            options:{responsive:true,maintainAspectRatio:false,
+                plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:12,padding:10,font:{size:11}}},
+                    tooltip:{backgroundColor:'rgba(0,0,0,0.8)',callbacks:{label:c=>`${c.dataset.label}: ₱${c.parsed.y.toLocaleString('en-US',{minimumFractionDigits:2})}`}}},
+                scales:{y:{beginAtZero:true,ticks:{callback:v=>'₱'+v.toLocaleString()}},x:{grid:{display:false}}}}
+        });
+    }
+
+    // ── TRANSACTION ACTIONS ───────────────────────────────────────────────────
+    function editTransaction(id) {
+        const t = state.transactions.find(t=>t.id===id);
+        if(!t) return;
+        document.getElementById('t-id').value = t.id;
+        document.getElementById('t-date').value = t.date;
+        document.getElementById('t-name').value = t.name;
+        document.querySelector(`input[name="t-type"][value="${t.type}"]`).checked = true;
+        document.getElementById('t-amount').value = t.amount;
+        document.getElementById('t-notes').value = t.notes||'';
+        document.getElementById('btn-text').textContent = 'Update Record';
+        document.getElementById('btn-submit').className = 'w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg shadow-md transition-all text-sm flex items-center justify-center gap-2';
+        document.getElementById('form-container').scrollIntoView({behavior:'smooth',block:'start'});
+    }
+
+    function deleteTransaction(id) {
+        const tx = state.transactions.find(t=>t.id===id);
+        if(!tx) return;
+        state.lastDeleted = { tx, index: state.transactions.findIndex(t=>t.id===id) };
+        state.transactions = state.transactions.filter(t=>t.id!==id);
+        state.selectedIds.delete(id);
+        logActivity('Delete', `Deleted transaction ${tx.name} ₱${tx.amount.toFixed(2)}`, id);
+        saveToStorage(); applyFilters();
+        showUndoBar();
+    }
+
+    function undoDelete() {
+        if(!state.lastDeleted) return;
+        const { tx, index } = state.lastDeleted;
+        state.transactions.splice(index, 0, tx);
+        state.lastDeleted = null;
+        saveToStorage(); applyFilters();
+        hideUndoBar();
+        showToast('Transaction restored!','success');
+    }
+
+    function showUndoBar() {
+        clearTimeout(state.undoTimer);
+        document.getElementById('undo-bar').classList.add('show');
+        state.undoTimer = setTimeout(() => { hideUndoBar(); state.lastDeleted = null; }, 5000);
+    }
+
+    function hideUndoBar() {
+        document.getElementById('undo-bar').classList.remove('show');
+    }
+
+    function duplicateTransaction(id) {
+        const t = state.transactions.find(t=>t.id===id);
+        if(!t) return;
+        const dup = { ...t, id: Date.now() };
+        state.transactions.push(dup);
+        saveToStorage(); applyFilters();
+        showToast('Transaction duplicated','success');
+    }
+
+    // ── BULK SELECT ───────────────────────────────────────────────────────────
+    function toggleSelect(id, checked) {
+        if(checked) state.selectedIds.add(id); else state.selectedIds.delete(id);
+        updateBulkUI();
+    }
+
+    function selectAll(checked) {
+        state.filteredTransactions.forEach(t => {
+            if(checked) state.selectedIds.add(t.id); else state.selectedIds.delete(t.id);
+        });
+        renderTable();
+        updateBulkUI();
+    }
+
+    function updateBulkUI() {
+        const btn = document.getElementById('bulk-delete-btn');
+        const n = state.selectedIds.size;
+        if(n>0) {
+            btn.classList.remove('hidden');
+            document.getElementById('bulk-count').textContent = `Delete ${n}`;
+        } else {
+            btn.classList.add('hidden');
+        }
+    }
+
+    function bulkDelete() {
+        if(!state.selectedIds.size) return;
+        showConfirm('Bulk Delete', `Delete ${state.selectedIds.size} selected transactions? This cannot be undone.`, () => {
+            const count = state.selectedIds.size;
+            state.transactions = state.transactions.filter(t=>!state.selectedIds.has(t.id));
+            logActivity('Bulk Delete', `Deleted ${count} transactions`);
+            state.selectedIds.clear();
+            saveToStorage(); applyFilters(); updateBulkUI();
+            showToast(`Deleted transactions`,'success');
+        });
+    }
+
+    // ── RECEIPT ───────────────────────────────────────────────────────────────
+    function showReceipt(id) {
+        const t = state.transactions.find(t=>t.id===id);
+        if(!t) return;
+        const body = document.getElementById('receipt-body');
+        body.innerHTML = `
+            <div class="text-center border-b pb-3 mb-3">
+                <div class="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center mx-auto mb-2"><i class="ph ph-nut text-2xl text-slate-900"></i></div>
+                <p class="font-bold text-lg">COPRA TRADE</p>
+                <p class="text-xs text-slate-500">Official Receipt</p>
+            </div>
+            <div class="space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-slate-500">Receipt No.</span><span class="font-mono font-bold">#${t.id.toString().slice(-6)}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Date</span><span class="font-bold">${t.date}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Name</span><span class="font-bold">${t.name}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Type</span>
+                    <span class="font-bold px-2 py-0.5 rounded text-xs ${t.type==='credit'?'bg-emerald-100 text-emerald-700':'bg-rose-100 text-rose-700'}">${t.type==='credit'?'RECEIVE':'RELEASE'}</span>
+                </div>
+                <div class="flex justify-between border-t pt-2 mt-2"><span class="text-slate-500">Amount</span><span class="font-black text-lg ${t.type==='credit'?'text-emerald-600':'text-rose-600'}">${fmt(t.amount)}</span></div>
+                ${t.notes?`<div class="flex justify-between"><span class="text-slate-500">Notes</span><span class="font-medium text-right max-w-[60%]">${t.notes}</span></div>`:''}
+            </div>
+            <div class="text-center border-t pt-3 mt-3 text-[10px] text-slate-400">Generated ${new Date().toLocaleString()}</div>`;
+        document.getElementById('receipt-modal').classList.remove('hidden');
+    }
+
+    function printReceipt() {
+        const content = document.getElementById('receipt-body').innerHTML;
+        const pa = document.getElementById('print-area');
+        pa.innerHTML = `<div style="max-width:320px;margin:0 auto;font-family:sans-serif;">${content}</div>`;
+        pa.classList.remove('hidden');
+        window.print();
+        pa.classList.add('hidden');
+    }
+
+    // ── REPORTS ───────────────────────────────────────────────────────────────
+    function openMonthlyReport() {
+        const body = document.getElementById('report-body');
+        body.innerHTML = '';
+        const monthly = {};
+        state.transactions.forEach(t => {
+            const mo = t.date.slice(0,7);
+            if(!monthly[mo]) monthly[mo]={received:0,released:0};
+            if(t.type==='credit') monthly[mo].received+=t.amount; else monthly[mo].released+=t.amount;
+        });
+        Object.keys(monthly).sort().reverse().forEach(mo => {
+            const d = monthly[mo];
+            const net = d.received-d.released;
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700';
+            tr.innerHTML = `<td class="px-3 py-2 font-medium">${new Date(mo+'-01').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</td>
+                <td class="px-3 py-2 text-right text-emerald-600">${fmt(d.received)}</td>
+                <td class="px-3 py-2 text-right text-rose-600">${fmt(d.released)}</td>
+                <td class="px-3 py-2 text-right font-bold ${net>=0?'text-emerald-600':'text-rose-600'}">${fmt(net)}</td>`;
+            body.appendChild(tr);
+        });
+
+        // MoM panel
+        buildMoMPanel();
+        // Per-person summary
+        buildPersonSummary();
+        document.getElementById('report-modal').classList.remove('hidden');
+    }
+
+    function buildMoMPanel() {
+        const now = new Date();
+        const thisMo = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        const prev = new Date(now.getFullYear(),now.getMonth()-1,1);
+        const prevMo = `${prev.getFullYear()}-${String(prev.getMonth()+1).padStart(2,'0')}`;
+        let tc=0,td=0,pc=0,pd=0;
+        state.transactions.forEach(t => {
+            const mo = t.date.slice(0,7);
+            if(mo===thisMo){ if(t.type==='credit')tc+=t.amount;else td+=t.amount; }
+            if(mo===prevMo){ if(t.type==='credit')pc+=t.amount;else pd+=t.amount; }
+        });
+        const panel = document.getElementById('mom-panel');
+        const card = (label, curr, prev, color) => {
+            const diff = prev>0?((curr-prev)/prev*100).toFixed(1):null;
+            const arrow = diff===null?'':(curr>=prev?`<span class="text-emerald-500 text-xs">▲${Math.abs(diff)}%</span>`:`<span class="text-rose-500 text-xs">▼${Math.abs(diff)}%</span>`);
+            return `<div class="p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                <p class="text-[10px] text-slate-500 uppercase font-bold mb-1">${label}</p>
+                <p class="text-sm font-bold ${color}">${fmt(curr)}</p>
+                <p class="text-[10px] text-slate-400">vs ${fmt(prev)} ${arrow}</p>
+            </div>`;
+        };
+        panel.innerHTML = card('This Mo. Received',tc,pc,'text-emerald-600') + card('This Mo. Released',td,pd,'text-rose-600') + card('Net This Mo.',tc-td,pc-pd,tc-td>=0?'text-emerald-600':'text-rose-600');
+    }
+
+    function buildPersonSummary() {
+        const people = {};
+        state.transactions.forEach(t => {
+            if(!people[t.name]) people[t.name]={received:0,released:0};
+            if(t.type==='credit') people[t.name].received+=t.amount; else people[t.name].released+=t.amount;
+        });
+        const body = document.getElementById('person-body');
+        body.innerHTML = '';
+        Object.entries(people).sort((a,b)=>(b[1].received+b[1].released)-(a[1].received+a[1].released)).forEach(([name,d]) => {
+            const net = d.received-d.released;
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-slate-100 dark:border-slate-700';
+            tr.innerHTML = `<td class="py-1 font-medium">${name}</td>
+                <td class="py-1 text-right text-emerald-600">${fmt(d.received)}</td>
+                <td class="py-1 text-right text-rose-600">${fmt(d.released)}</td>
+                <td class="py-1 text-right font-bold ${net>=0?'text-emerald-600':'text-rose-600'}">${fmt(net)}</td>`;
+            body.appendChild(tr);
+        });
+    }
+
+    function togglePersonSummary() {
+        state.personSummaryVisible = !state.personSummaryVisible;
+        document.getElementById('person-summary').classList.toggle('hidden', !state.personSummaryVisible);
+        document.getElementById('person-toggle-text').textContent = state.personSummaryVisible ? 'Hide Per-Person Summary' : 'Show Per-Person Summary';
+    }
+
+    function printReport() {
+        const pa = document.getElementById('print-area');
+        const monthly = document.getElementById('report-body').parentElement.outerHTML;
+        const mom = document.getElementById('mom-panel').outerHTML;
+        pa.innerHTML = `<div style="font-family:sans-serif;padding:20px;">
+            <h1 style="font-size:18px;font-weight:bold;margin-bottom:4px;">COPRA TRADE</h1>
+            <p style="color:#64748b;font-size:12px;margin-bottom:16px;">Monthly Summary Report — Generated ${new Date().toLocaleDateString()}</p>
+            ${mom}${monthly}</div>`;
+        pa.classList.remove('hidden');
+        window.print();
+        pa.classList.add('hidden');
+    }
+
+
+    // ── PENDING APPROVALS ─────────────────────────────────────────────────────
+    async function openPendingApprovals() {
+        document.getElementById('pending-modal').classList.remove('hidden');
+        const list = document.getElementById('pending-list');
+        list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-spinner animate-spin mr-2"></i>Loading...</p>';
+
+        const conn = getConnection();
+        if(!conn.scriptUrl || !conn.secretToken) {
+            list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">Configure connection in Settings first.</p>';
+            return;
+        }
+
+        try {
+            const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=getPending`;
+            const res = await fetch(url);
+            const rows = await res.json();
+            // Skip header row
+            const data = rows.slice(1).filter(r => String(r[5]).trim() === 'Pending');
+
+            if(!data.length) {
+                list.innerHTML = '<p class="text-slate-400 text-sm text-center py-8"><i class="ph ph-check-circle text-emerald-500 mr-2"></i>No pending transactions.</p>';
+                document.getElementById('pending-badge').classList.add('hidden');
+                return;
+            }
+
+            // Update badge
+            const badge = document.getElementById('pending-badge');
+            badge.textContent = data.length;
+            badge.classList.remove('hidden');
+
+            list.innerHTML = '';
+            data.forEach(row => {
+                const [id, date, name, amount, submittedBy, status, submittedAt] = row;
+                const fmtAmt = '₱' + parseFloat(amount).toLocaleString('en-US', {minimumFractionDigits:2});
+                const fmtDate = date ? new Date(date).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '-';
+                const fmtTime = submittedAt ? new Date(submittedAt).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '-';
+                const card = document.createElement('div');
+                card.className = 'bg-slate-50 dark:bg-slate-700 rounded-xl p-4 flex items-center justify-between gap-4';
+                card.innerHTML = `
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-bold text-sm">${name}</span>
+                            <span class="text-[10px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-2 py-0.5 rounded-full font-bold uppercase">Pending</span>
+                        </div>
+                        <p class="text-xl font-black text-rose-500">${fmtAmt}</p>
+                        <p class="text-[10px] text-slate-400 mt-1">Submitted by <span class="font-bold">${submittedBy}</span> · ${fmtTime}</p>
+                    </div>
+                    <div class="flex gap-2 flex-shrink-0">
+                        <button onclick="app.approveTransaction('${id}')" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+                            <i class="ph ph-check"></i> Approve
+                        </button>
+                        <button onclick="app.rejectTransaction('${id}')" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1">
+                            <i class="ph ph-x"></i> Reject
+                        </button>
+                    </div>`;
+                list.appendChild(card);
+            });
+        } catch(e) {
+            list.innerHTML = `<p class="text-rose-400 text-sm text-center py-8">Failed to load pending transactions.</p>`;
+        }
+    }
+
+    async function approveTransaction(id) {
+        const conn = getConnection();
+        try {
+            await fetch(conn.scriptUrl, {
+                method: 'POST', mode: 'no-cors',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({token: conn.secretToken, action: 'approvePending', id, user: state.currentUser})
+            });
+            addNotification('Transaction approved', 'success');
+            showToast('Transaction approved!', 'success');
+            openPendingApprovals();
+            // Refresh main data
+            setTimeout(() => { applyFilters(); }, 1000);
+        } catch(e) {
+            showToast('Failed to approve. Try again.', 'error');
+        }
+    }
+
+    async function rejectTransaction(id) {
+        showConfirm('Reject Transaction', 'Are you sure you want to reject this transaction?', async () => {
+            const conn = getConnection();
+            try {
+                await fetch(conn.scriptUrl, {
+                    method: 'POST', mode: 'no-cors',
+                    headers: {'Content-Type':'application/json'},
+                    body: JSON.stringify({token: conn.secretToken, action: 'rejectPending', id})
+                });
+                showToast('Transaction rejected.', 'info');
+                openPendingApprovals();
+            } catch(e) {
+                showToast('Failed to reject. Try again.', 'error');
+            }
+        });
+    }
+
+
+    // ── NOTIFICATIONS & ACTIVITY LOG ──────────────────────────────────────────
+    function requestNotificationPermission() {
+        if (!("Notification" in window)) return;
+        if (Notification.permission === "default") {
+            Notification.requestPermission();
+        }
+    }
+
+    function showBrowserNotification(title, body) {
+        if (!("Notification" in window)) return;
+        if (Notification.permission === "granted") {
+            new Notification(title, { body, icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect fill="%23f59e0b" width="100" height="100" rx="20"/><text x="50" y="70" font-size="60" text-anchor="middle" fill="%23000">🥥</text></svg>' });
+        }
+    }
+
+    function addNotification(message, type = 'info') {
+        state.notifications.unshift({ message, type, time: new Date().toISOString(), id: Date.now() });
+        if (state.notifications.length > 20) state.notifications = state.notifications.slice(0, 20);
+        updateNotificationBadge();
+    }
+
+    function updateNotificationBadge() {
+        const badge = document.getElementById('notif-badge');
+        const count = state.notifications.length;
+        if (count > 0) {
+            badge.textContent = count > 9 ? '9+' : count;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    // Close notification dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('notif-dropdown');
+        const bell = e.target.closest('[onclick*="toggleNotifications"]');
+        if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !bell) {
+            dropdown.classList.add('hidden');
+        }
+    });
+
+    function toggleNotifications() {
+        const dropdown = document.getElementById('notif-dropdown');
+        const isHidden = dropdown.classList.contains('hidden');
+        if (isHidden) {
+            renderNotifications();
+            dropdown.classList.remove('hidden');
+        } else {
+            dropdown.classList.add('hidden');
+        }
+    }
+
+    function renderNotifications() {
+        const list = document.getElementById('notif-list');
+        if (!state.notifications.length) {
+            list.innerHTML = '<p class="text-slate-400 text-xs text-center py-8">No new notifications</p>';
+            return;
+        }
+        list.innerHTML = '';
+        state.notifications.forEach(n => {
+            const time = new Date(n.time).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+            const colors = {info:'text-blue-500',success:'text-emerald-500',warning:'text-amber-500',error:'text-rose-500'};
+            const icons = {info:'ph-info',success:'ph-check-circle',warning:'ph-warning',error:'ph-x-circle'};
+            const div = document.createElement('div');
+            div.className = 'p-3 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer';
+            div.innerHTML = `
+                <div class="flex items-start gap-2">
+                    <i class="ph ${icons[n.type]||icons.info} ${colors[n.type]||colors.info} mt-0.5"></i>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-xs text-slate-700 dark:text-slate-300">${n.message}</p>
+                        <p class="text-[10px] text-slate-400 mt-0.5">${time}</p>
+                    </div>
+                </div>`;
+            list.appendChild(div);
+        });
+    }
+
+    function clearNotifications() {
+        state.notifications = [];
+        updateNotificationBadge();
+        document.getElementById('notif-dropdown').classList.add('hidden');
+    }
+
+    async function startPendingPolling() {
+        // Poll every 30 seconds for new pending transactions
+        setInterval(async () => {
+            const conn = getConnection();
+            if (!conn.scriptUrl || !conn.secretToken) return;
+            try {
+                const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=getPending`;
+                const res = await fetch(url);
+                const rows = await res.json();
+                const pending = rows.slice(1).filter(r => String(r[5]).trim() === 'Pending');
+                const count = pending.length;
+                
+                if (count > state.lastPendingCount) {
+                    const newCount = count - state.lastPendingCount;
+                    addNotification(`${newCount} new pending approval${newCount>1?'s':''}`, 'warning');
+                    showBrowserNotification('Copra Trade', `${newCount} new pending transaction${newCount>1?'s':''} awaiting approval`);
+                }
+                state.lastPendingCount = count;
+            } catch(e) {}
+        }, 30000);
+    }
+
+    async function openActivityLog() {
+        document.getElementById('activity-modal').classList.remove('hidden');
+        const body = document.getElementById('activity-body');
+        body.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-slate-400 text-xs"><i class="ph ph-spinner animate-spin mr-2"></i>Loading...</td></tr>';
+
+        const conn = getConnection();
+        if (!conn.scriptUrl || !conn.secretToken) {
+            body.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-slate-400 text-xs">Configure connection first.</td></tr>';
+            return;
+        }
+
+        try {
+            const url = `${conn.scriptUrl}?token=${encodeURIComponent(conn.secretToken)}&action=getActivity`;
+            const res = await fetch(url);
+            const rows = await res.json();
+            state.activityLog = rows.slice(1).reverse(); // Skip header, newest first
+            filterActivityLog();
+        } catch(e) {
+            body.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-rose-400 text-xs">Failed to load activity log.</td></tr>';
+        }
+    }
+
+    function filterActivityLog() {
+        const filter = document.getElementById('activity-filter').value;
+        const body = document.getElementById('activity-body');
+        let data = state.activityLog || [];
+        
+        if (filter !== 'all') {
+            data = data.filter(row => row[2] === filter);
+        }
+
+        if (!data.length) {
+            body.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-slate-400 text-xs">No activity found.</td></tr>';
+            return;
+        }
+
+        body.innerHTML = '';
+        data.forEach(row => {
+            const [timestamp, user, action, details, txId] = row;
+            const time = new Date(timestamp).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+            const actionColors = {Add:'text-emerald-600',Edit:'text-blue-600',Delete:'text-rose-600',Approve:'text-emerald-600',Reject:'text-rose-600',Submit:'text-amber-600'};
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700';
+            tr.innerHTML = `
+                <td class="px-3 py-2 text-slate-500">${time}</td>
+                <td class="px-3 py-2 font-medium">${user}</td>
+                <td class="px-3 py-2"><span class="font-bold ${actionColors[action]||''}">${action}</span></td>
+                <td class="px-3 py-2 text-slate-600 dark:text-slate-400">${details}</td>`;
+            body.appendChild(tr);
+        });
+    }
+
+    async function logActivity(actionType, details, txId = '') {
+        const conn = getConnection();
+        if (!conn.scriptUrl || !conn.secretToken) return;
+        try {
+            await fetch(conn.scriptUrl, {
+                method: 'POST', mode: 'no-cors',
+                headers: {'Content-Type':'application/json'},
+                body: JSON.stringify({
+                    token: conn.secretToken,
+                    action: 'logActivity',
+                    user: state.currentUser,
+                    actionType, details, txId
+                })
+            });
+        } catch(e) {}
+    }
+
+    // ── EXPORT & BACKUP ───────────────────────────────────────────────────────
+    function exportToCSV() {
+        let csv = 'Date,Name,Type,Amount,Balance,Notes\n';
+        let bal = 0;
+        [...state.transactions].sort((a,b)=>new Date(a.date)-new Date(b.date)).forEach(t => {
+            bal += t.type==='credit'?t.amount:-t.amount;
+            csv += `${t.date},"${t.name.replace(/"/g,'""')}",${t.type},${t.amount.toFixed(2)},${bal.toFixed(2)},"${(t.notes||'').replace(/"/g,'""')}"\n`;
+        });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+        a.download = `copra_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click(); URL.revokeObjectURL(a.href);
+        showToast('Exported!','success');
+    }
+
+    function downloadBackup() {
+        const blob = new Blob([JSON.stringify({version:'3.0',date:new Date().toISOString(),transactions:state.transactions,settings:state.settings},null,2)],{type:'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `copra_backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.click(); URL.revokeObjectURL(a.href);
+        showToast('Backup downloaded!','success');
+    }
+
+    function importBackup() {
+        const input = document.createElement('input');
+        input.type='file'; input.accept='.json';
+        input.onchange = async e => {
+            try {
+                const backup = JSON.parse(await e.target.files[0].text());
+                if(!backup.transactions||!Array.isArray(backup.transactions)) throw new Error('Invalid file');
+                showConfirm('Import Backup',`Import ${backup.transactions.length} transactions? This replaces all current data.`, () => {
+                    state.transactions = backup.transactions;
+                    if(backup.settings) state.settings = Object.assign(state.settings, backup.settings);
+                    saveToStorage(); applyFilters();
+                    showToast('Backup imported!','success');
+                    closeModal('settings-modal');
+                });
+            } catch { showToast('Invalid backup file','error'); }
+        };
+        input.click();
+    }
+
+    function clearAllData() {
+        showConfirm('Clear All Data','This permanently deletes all transactions. Cannot be undone.', () => {
+            state.transactions = []; state.filteredTransactions = [];
+            saveToStorage(); applyFilters();
+            showToast('All data cleared','success');
+            closeModal('settings-modal');
+        });
+    }
+
+    // ── SETTINGS ──────────────────────────────────────────────────────────────
+    function showSettings() {
+        const conn = getConnection();
+        document.getElementById('conn-script-url').value = conn.scriptUrl||'';
+        document.getElementById('conn-token').value = conn.secretToken||'';
+        document.getElementById('starting-capital').value = state.settings.startingCapital||'';
+        document.getElementById('low-balance-threshold').value = state.settings.lowBalanceThreshold||'';
+        document.getElementById('large-tx-threshold').value = state.settings.largeTxThreshold||'';
+        document.getElementById('capital-goal').value = state.settings.capitalGoal||'';
+
+        document.getElementById('settings-modal').classList.remove('hidden');
+    }
+
+    function saveConnectionSettings() {
+        const scriptUrl = document.getElementById('conn-script-url').value.trim();
+        const secretToken = document.getElementById('conn-token').value.trim();
+        if(secretToken && secretToken.length<12) { showToast('Token must be at least 12 characters','warning'); return; }
+        localStorage.setItem(CONFIG.CONN_KEY, JSON.stringify({scriptUrl,secretToken}));
+
+        state.settings.startingCapital = parseFloat(document.getElementById('starting-capital').value)||0;
+        state.settings.lowBalanceThreshold = parseFloat(document.getElementById('low-balance-threshold').value)||0;
+        state.settings.largeTxThreshold = parseFloat(document.getElementById('large-tx-threshold').value)||0;
+        state.settings.capitalGoal = parseFloat(document.getElementById('capital-goal').value)||0;
+        saveToStorage();
+        showToast('Settings saved!','success');
+        closeModal('settings-modal');
+        applyFilters();
+    }
+
+    // ── UI UTILITIES ──────────────────────────────────────────────────────────
+    function showToast(msg, type='info') {
+        const t = document.getElementById('toast');
+        const icons = {success:'ph-check-circle',error:'ph-x-circle',warning:'ph-warning',info:'ph-info'};
+        const colors = {success:'text-emerald-400',error:'text-rose-400',warning:'text-amber-400',info:'text-blue-400'};
+        document.getElementById('toast-icon').className = `ph ${icons[type]||icons.info} ${colors[type]||colors.info}`;
+        document.getElementById('toast-message').textContent = msg;
+        t.classList.remove('translate-y-20','opacity-0');
+        setTimeout(()=>t.classList.add('translate-y-20','opacity-0'),3000);
+    }
+
+    function showConfirm(title, msg, cb) {
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-message').textContent = msg;
+        document.getElementById('confirm-action').onclick = () => { cb(); closeModal('confirm-modal'); };
+        document.getElementById('confirm-modal').classList.remove('hidden');
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    function closeAllModals() { document.querySelectorAll('[id$="-modal"]').forEach(m=>m.classList.add('hidden')); }
+
+    function switchToDashboard() {
+        document.getElementById('history-badge').classList.add('hidden');
+        applyFilters();
+    }
+
+    function toggleDarkMode() {
+        const c = document.getElementById('app-container');
+        c.classList.toggle('dark');
+        const dark = c.classList.contains('dark');
+        localStorage.setItem(CONFIG.THEME_KEY, dark?'dark':'light');
+        document.getElementById('dark-icon').className = dark?'ph ph-sun text-xl':'ph ph-moon text-xl';
+    }
+
+    function applyTheme() {
+        const c = document.getElementById('app-container');
+        if(localStorage.getItem(CONFIG.THEME_KEY)==='dark') {
+            c.classList.add('dark');
+            document.getElementById('dark-icon').className = 'ph ph-sun text-xl';
+        }
+    }
+
+    // ── PUBLIC API ────────────────────────────────────────────────────────────
+    return {
+        init, fetchSheetData, handleFormSubmit, applyFilters, clearFilters, resetForm,
+        switchToDashboard, toggleDarkMode, exportToCSV, downloadBackup, importBackup,
+        clearAllData, deleteTransaction, editTransaction, duplicateTransaction,
+        openMonthlyReport, printReport, showReceipt, printReceipt, togglePersonSummary,
+        showSettings, saveConnectionSettings, closeModal, updateChart,
+        prevPage, nextPage, bulkDelete, toggleSelect, selectAll,
+        undoDelete, submitLogin, openSettingsFromLogin,
+        openPendingApprovals, approveTransaction, rejectTransaction,
+        openActivityLog, filterActivityLog, toggleNotifications, clearNotifications, logActivity
+    };
+})();
+
+window.app = CopraApp;
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',()=>CopraApp.init());
+else CopraApp.init();
+</script>
+</body>
+</html>
